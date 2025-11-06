@@ -85,6 +85,7 @@ MC_BRANCHES_TO_SAVE:
   - MC_px
   - MC_py
   - MC_pz
+  - MC_p
   - MC_vx
   - MC_vy
   - MC_vz
