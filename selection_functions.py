@@ -301,6 +301,11 @@ def apply_partial_sampling_fraction_cut(events, is_simulation = False, save_plot
             return (-.22/.18)*ecin + .22
         else:
             return (-.22/.15)*ecin + .22
+    ECIN_SF = np.array(events["reconstructed"]["E_ECIN"]/events["reconstructed"]["p"])
+    partial_SF_mask = np.array(events["reconstructed"]["E_PCAL"]/events["reconstructed"]["p"]) > ecin_epcal_cut(ECIN_SF, is_simulation)
+    partial_SF_mask[events["reconstructed"]["p"] < 4.5] = True
+    masked_events = events[partial_SF_mask]
+
     if save_plots:
         fig, axs = plt.subplots(3, 2, figsize=(18, 18))
         axs = axs.flatten()
@@ -325,10 +330,32 @@ def apply_partial_sampling_fraction_cut(events, is_simulation = False, save_plot
         if plot_title is not None:
             plt.suptitle(plot_title, y=1.0)
         if plots_directory is not None:
-            plt.savefig(plots_directory+"partial_sampling_fraction.png")
-    ECIN_SF = np.array(events["reconstructed"]["E_ECIN"]/events["reconstructed"]["p"])
-    partial_SF_mask = np.array(events["reconstructed"]["E_PCAL"]/events["reconstructed"]["p"]) > ecin_epcal_cut(ECIN_SF, is_simulation)
-    partial_SF_mask[events["reconstructed"]["p"] < 4.5] = True
-    masked_events = events[partial_SF_mask]
+            plt.savefig(plots_directory+"partial_sampling_fraction_beforecut.png")
+        
+        fig, axs = plt.subplots(3, 2, figsize=(18, 18))
+        axs = axs.flatten()
+        for sector in range(num_sectors):
+            sector_cut = masked_events["reconstructed"]["sector"]==(sector+1)
+            if len(np.array(masked_events["reconstructed"]["E_ECIN"]/masked_events["reconstructed"]["p"])[sector_cut])==0:
+                continue
+            hist, ecin_bins, epcal_bins, mesh = axs[sector].hist2d(
+                np.array(masked_events["reconstructed"]["E_ECIN"]/masked_events["reconstructed"]["p"])[sector_cut], 
+                np.array(masked_events["reconstructed"]["E_PCAL"]/masked_events["reconstructed"]["p"])[sector_cut],
+                bins=(100,100),
+                range=[(0,.2), (0,.25)],
+                norm=colors.LogNorm())
+            axs[sector].set_xlabel("$E_{ECIN}$/p")
+            axs[sector].set_ylabel("$E_{PCAL}$/p")
+            axs[sector].set_title(f"Sector {sector+1}") 
+            divider = make_axes_locatable(axs[sector])
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            cbar = fig.colorbar(mesh, cax=cax)
+            axs[sector].plot(ecin_bins.tolist(), ecin_epcal_cut(np.array(ecin_bins), is_simulation), color='red')
+        fig.tight_layout()
+        if plot_title is not None:
+            plt.suptitle(plot_title, y=1.0)
+        if plots_directory is not None:
+            plt.savefig(plots_directory+"partial_sampling_fraction_aftercut.png")
+    
     print(f"Have {len(masked_events)} events after kinematic cuts")
     return masked_events

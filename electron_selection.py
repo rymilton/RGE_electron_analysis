@@ -7,7 +7,7 @@ import time
 import h5py as h5
 import os
 from utils import LoadYaml, open_data
-from selection_functions import apply_kinematic_cuts, apply_fiducial_cuts, apply_partial_sampling_fraction_cut
+from selection_functions import *
 
 
 def parse_arguments():
@@ -114,6 +114,7 @@ def main():
         plot_title = plot_title,
     )
     # Apply SF cuts
+    
     # Save the cut electrons. Should have the option to cut on targets or not
     
 if __name__ == "__main__":
