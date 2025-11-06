@@ -6,7 +6,7 @@ import numpy as np
 import time
 import h5py as h5
 import os
-from utils import LoadYaml
+from utils import LoadYaml, open_data
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -52,22 +52,6 @@ def parse_arguments():
 
     return flags
 
-def open_data(data_path, branches_to_open, open_MC = False, MC_branches_to_open = None):
-    event_dictionary = {"reconstructed": ak.Array([])}
-    print("Using file", data_path)
-    start_time = time.time()
-    with uproot.open(data_path + ":data") as file:
-        print("Opening reconstructed data")
-        event_dictionary["reconstructed"] = file.arrays(filter_name = branches_to_open)
-    if open_MC:
-        event_dictionary["MC"] = ak.Array([])
-        with uproot.open(data_path + ":MC") as file:
-            print("Opening MC data")
-            event_dictionary["MC"] = file.arrays(filter_name = MC_branches_to_open)
-    print(f"Took {time.time()-start_time} s to open file!")
-    output_array = ak.Array(event_dictionary)
-    print(f"Loaded {len(output_array)} events")
-    return output_array
 def save_output(
     events,
     output_directory,
@@ -170,10 +154,13 @@ def main():
     parameters = LoadYaml(flags.config, flags.config_directory)
 
     events_array = open_data(
-        flags.input_file,
-        parameters["BRANCHES_TO_OPEN"],
-        flags.save_MC,
-        parameters["MC_BRANCHES_TO_OPEN"] if flags.save_MC else None)
+        data_path = flags.input_file,
+        branches_to_open = parameters["BRANCHES_TO_OPEN"],
+        data_tree_name = "data",
+        open_MC = flags.save_MC,
+        MC_branches_to_open = parameters["MC_BRANCHES_TO_OPEN"] if flags.save_MC else None,
+        MC_tree_name = "MC",
+    )
 
     # Removing events with no reconstructed particles
     events_array = events_array[ak.num(events_array["reconstructed"]["pid"], axis=1)>0]
