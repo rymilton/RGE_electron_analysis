@@ -92,6 +92,12 @@ def get_eventbuilder_electrons(events):
         raise ValueError("More than 1 trigger electron found in some events")
     
     events["reconstructed"] = events["reconstructed"][:,0]
+    sampling_fraction = (events["reconstructed"]["E_PCAL"] + events["reconstructed"]["E_ECOUT"] + events["reconstructed"]["E_ECIN"]) / events["reconstructed"]["p"]
+    events["reconstructed"] = ak.with_field(
+        events["reconstructed"],
+        sampling_fraction,
+        "SF"
+    )
     print(f"Have {len(events)} events after event builder electron cuts")
     return events
 def calc_p(px, py, pz):
@@ -121,6 +127,9 @@ def get_DIS_quantities(events):
     electrons["x"] = calc_xb(electrons["Q2"], E_beam, electrons["nu"])
     electrons["y"] = calc_y(electrons["p"], E_beam)
     electrons["W"] = np.sqrt(calc_W2(electrons["p"], E_beam, electrons["theta"]))
+    
+    electrons["theta_degrees"] = electrons["theta"]*180/np.pi
+    electrons["phi_degrees"] = electrons["phi"]*180/np.pi
 
     events["reconstructed"] = electrons
     return events
@@ -135,13 +144,14 @@ def get_DIS_quantities_MC(events):
     electrons["MC_x"] = calc_xb(electrons["MC_Q2"], E_beam, electrons["MC_nu"])
     electrons["MC_y"] = calc_y(electrons["MC_p"], E_beam)
     electrons["MC_W"] = np.sqrt(calc_W2(electrons["MC_p"], E_beam, electrons["MC_theta"]))
+    electrons["MC_theta_degrees"] = electrons["MC_theta"]*180/np.pi
+    electrons["MC_phi_degrees"] = electrons["MC_phi"]*180/np.pi
 
     events["MC"] = electrons
     return events
 def get_MC_electrons(events):
     events["MC"] = events["MC"][events["MC"]["MC_pid"]==11]
     
-
     # For events with multiple electrons, only keeping the highest pz electron, which is the first
     # The secondary electrons all have low pz values -- below .5 GeV
     events["MC"] = events["MC"][:, 0]
