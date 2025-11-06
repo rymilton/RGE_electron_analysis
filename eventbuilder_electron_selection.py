@@ -6,14 +6,14 @@ import numpy as np
 import time
 import h5py as h5
 import os
-from utils import LoadYaml, open_data
+from utils import LoadYaml, open_data, save_output
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
     
     parser.add_argument(
         "--input_file",
-        default="/home/rmilton/work_dir/rge_datasets/job_9586_LD2Csolid_clasdis_deuteron_zh0_3k/ntuples/ntuples_LD2Csolid_clasdis_deuteron_100mil_zh0-9586-0.root",
+        default="/home/rmilton/work_dir/rge_datasets/job_9586_LD2Csolid_clasdis_deuteron_zh0_3k/ntuples_LD2Csolid_clasdis_deuteron_zh0_3000files.root",
         help="ROOT file containing tuples from tuple_maker",
         type=str,
     )
@@ -25,7 +25,7 @@ def parse_arguments():
     )
     parser.add_argument(
         "--output_file",
-        default="electrons_eventbuilder_LD2Csolid_clasdis_deuteron_100mil_zh0-9586-0.root",
+        default="electrons_eventbuilder_LD2Csolid_clasdis_deuteron_zh0_3000files.root",
         help="ROOT file containing tuples from tuple_maker",
         type=str,
     )
@@ -52,30 +52,6 @@ def parse_arguments():
 
     return flags
 
-def save_output(
-    events,
-    output_directory,
-    output_file,
-    branches_to_save,
-    save_MC = False,
-    MC_branches_to_save = None
-):
-    reconstructed_dictionary = {}
-    print("Saving reconstructed electrons")
-    for field in branches_to_save:
-        reconstructed_dictionary[field] = events["reconstructed"][field]
-    if save_MC:
-        MC_dictionary = {}
-        for field in MC_branches_to_save:
-            MC_dictionary[field] = events["MC"][field]
-    
-    os.makedirs(output_directory, exist_ok=True)
-    full_output_path = os.path.join(output_directory, output_file)
-
-    with uproot.recreate(full_output_path) as file:
-        file["reconstructed_electrons"] = reconstructed_dictionary
-        if save_MC:
-            file["MC_electrons"] = MC_dictionary
 
 def get_eventbuilder_electrons(events):
     status = events["reconstructed"]["status"]
