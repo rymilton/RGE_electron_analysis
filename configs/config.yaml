@@ -42,14 +42,15 @@ BRANCHES_TO_SAVE:
   - v_x
   - v_y
   - v_z
-  - theta
-  - phi
+  - theta_degrees
+  - phi_degrees
   - sector
   - NDF
   - chi2
   - E_PCAL
   - E_ECIN
   - E_ECOUT
+  - SF
   - PCAL_U
   - PCAL_V
   - PCAL_W
@@ -89,10 +90,25 @@ MC_BRANCHES_TO_SAVE:
   - MC_vx
   - MC_vy
   - MC_vz
-  - MC_theta
-  - MC_phi
+  - MC_theta_degrees
+  - MC_phi_degrees
   - MC_Q2
   - MC_nu
   - MC_x
   - MC_y
   - MC_W
+
+ELECTRON_KINEMATIC_CUTS:
+  - Q2 > 1
+  - y < 0.8
+  - W > 2
+  - theta_degrees > 5
+  - p > 2
+  - p < 8
+
+ELECTRON_FIDUCIAL_CUTS:
+  - PCAL_W > 13.5
+  - PCAL_V > 13.5
+  - DC_region1_edge > 4.5
+  - DC_region2_edge > 3.5
+  - DC_region3_edge > 7.5
