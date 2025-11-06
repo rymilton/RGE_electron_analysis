@@ -6,7 +6,7 @@ import numpy as np
 import time
 import h5py as h5
 import os
-from utils import LoadYaml, open_data
+from utils import LoadYaml, open_data, save_output
 from selection_functions import *
 
 
@@ -18,6 +18,12 @@ def parse_arguments():
         default="/home/rmilton/work_dir/rge_datasets/job_9586_LD2Csolid_clasdis_deuteron_zh0_3k/eventbuilder_electrons/electrons_eventbuilder_LD2Csolid_clasdis_deuteron_100mil_zh0-9586-0.root",
         help="ROOT file containing event builder electrons after running eventbuilder_electron_selection.py",
         type=str,
+    )
+    parser.add_argument(
+        "--nmax",
+        default=None,
+        help="Max number of events to load",
+        type=int,
     )
     parser.add_argument(
         "--output_directory",
@@ -78,9 +84,7 @@ def main():
     flags = parse_arguments()
     
     # Open data
-    print(flags.config, flags.config_directory)
     parameters = LoadYaml(flags.config, flags.config_directory)
-
     events_array = open_data(
         data_path = flags.input_file,
         branches_to_open = parameters["BRANCHES_TO_SAVE"],
@@ -88,6 +92,7 @@ def main():
         open_MC = flags.save_MC,
         MC_branches_to_open = parameters["MC_BRANCHES_TO_SAVE"] if flags.save_MC else None,
         MC_tree_name = "MC_electrons",
+        nmax = flags.nmax,
     )
     # Apply DIS cuts and other basic cuts
     events_array = apply_kinematic_cuts(events_array, parameters["ELECTRON_KINEMATIC_CUTS"])
@@ -114,8 +119,21 @@ def main():
         plot_title = plot_title,
     )
     # Apply SF cuts
-    
+    events_array = apply_sampling_fraction_cut(
+        events = events_array,
+        save_plots = flags.save_plots,
+        plots_directory = flags.plots_directory,
+        plot_title = plot_title,
+    )
     # Save the cut electrons. Should have the option to cut on targets or not
+    save_output(
+        events_array,
+        flags.output_directory,
+        flags.output_file,
+        parameters["ELECTRON_SELECTION_BRANCHES_TO_SAVE"],
+        flags.save_MC,
+        parameters["MC_BRANCHES_TO_SAVE"] if flags.save_MC else None
+    )
     
 if __name__ == "__main__":
     main()

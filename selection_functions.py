@@ -4,6 +4,9 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import mplhep as hep 
 hep.style.use(hep.style.CMS)
 import numpy as np 
+import awkward as ak
+import pandas as pd
+from scipy.optimize import curve_fit
 
 # Converting operator strings to operations on Awkward arrays
 array_operator_dict = {
@@ -127,6 +130,7 @@ def apply_fiducial_cuts(events, fiducial_cuts, save_plots = True, plots_director
             plt.suptitle(plot_title, y=1.0)
         if plots_directory is not None:
             plt.savefig(plots_directory+"PCAL_U.png")
+        plt.close()
 
         # Plotting the DC cuts
         region1_low_bin, region1_high_bin, region1_num_bins = (-150, 150), (-150, 150), (250, 250)
@@ -184,6 +188,7 @@ def apply_fiducial_cuts(events, fiducial_cuts, save_plots = True, plots_director
             plt.suptitle(plot_title, y=1.0)
         if plots_directory is not None:
             plt.savefig(plots_directory+"DC_before_fiducialcuts.png")
+        plt.close()
 
         # Plot of chi2/NDF
         distance_to_edge_low_bin = 0
@@ -231,6 +236,7 @@ def apply_fiducial_cuts(events, fiducial_cuts, save_plots = True, plots_director
             plt.suptitle(plot_title, y=1.0)
         if plots_directory is not None:
             plt.savefig(plots_directory+"DC_chi2NDF.png")
+        plt.close()
         
         # DC plot with fiducial cuts
         region1_low_bin, region1_high_bin, region1_num_bins = (-150, 150), (-150, 150), (250, 250)
@@ -288,6 +294,7 @@ def apply_fiducial_cuts(events, fiducial_cuts, save_plots = True, plots_director
             plt.suptitle(plot_title, y=1.0)
         if plots_directory is not None:
             plt.savefig(plots_directory+"DC_after_fiducialcuts.png")
+        plt.close()
     
     fiducial_cuts = (PCAL_fiducial_mask) & (DC_fiducial_mask)
     masked_events = events[fiducial_cuts]
@@ -331,6 +338,7 @@ def apply_partial_sampling_fraction_cut(events, is_simulation = False, save_plot
             plt.suptitle(plot_title, y=1.0)
         if plots_directory is not None:
             plt.savefig(plots_directory+"partial_sampling_fraction_beforecut.png")
+        plt.close()
         
         fig, axs = plt.subplots(3, 2, figsize=(18, 18))
         axs = axs.flatten()
@@ -356,6 +364,219 @@ def apply_partial_sampling_fraction_cut(events, is_simulation = False, save_plot
             plt.suptitle(plot_title, y=1.0)
         if plots_directory is not None:
             plt.savefig(plots_directory+"partial_sampling_fraction_aftercut.png")
+        plt.close()
     
-    print(f"Have {len(masked_events)} events after kinematic cuts")
+    print(f"Have {len(masked_events)} events after partial SF cuts")
+    return masked_events
+
+def gaus(x, a, mu, sigma):
+    return a*np.exp(-(x-mu)**2/(2*sigma*sigma))
+
+def sf_gaussians_by_sector(sampling_fractions_by_sector,
+                           xaxis_by_sector,
+                           xaxis_bins_by_sector,
+                           sector_number,
+                           SF_bins,
+                           xaxis_name,
+                           save_plots = True,
+                           plots_directory = None,
+                           plot_title = None):
+    sf_fit_data = {
+        "bin_low": [],
+        "bin_high": [],
+        "bin_center": [],
+        "mu": [],
+        "sigma": []
+    }
+    sector_index = sector_number - 1
+    low_sf_bin, high_sf_bin = SF_bins[0], SF_bins[1]
+    fig, axs = plt.subplots(10, 10, figsize=(45, 55))
+    fig.subplots_adjust(hspace=0.1, wspace=0.1)
+    axs = axs.flatten()
+    for i, lower_bin_edge in enumerate(xaxis_bins_by_sector[sector_index]):
+        if i == len(xaxis_bins_by_sector[sector_index])-1:
+            break
+        upper_bin_edge = xaxis_bins_by_sector[sector_index][i+1]
+        xaxis_bin_mask = (xaxis_by_sector[sector_index]>lower_bin_edge) & (xaxis_by_sector[sector_index]<upper_bin_edge)
+        sector_sf_mask = (sampling_fractions_by_sector[sector_index][xaxis_bin_mask] > .2) & (sampling_fractions_by_sector[sector_index][xaxis_bin_mask] <.27)
+        
+        counts, bins, _ = axs[i].hist(sampling_fractions_by_sector[sector_index][xaxis_bin_mask], bins=100, range=(low_sf_bin, high_sf_bin))
+        
+        bin_centers = (bins[:-1] + bins[1:])/2
+        sf_mask = (bin_centers>.2) & (bin_centers<.3)
+        popt, pcov = curve_fit(
+            gaus,
+            bin_centers[sf_mask],
+            counts[sf_mask],
+            p0=(len(sampling_fractions_by_sector[sector_index][xaxis_bin_mask][sector_sf_mask]),
+                np.mean(sampling_fractions_by_sector[sector_index][xaxis_bin_mask][sector_sf_mask]),
+                np.std(sampling_fractions_by_sector[sector_index][xaxis_bin_mask][sector_sf_mask]))
+        )
+        sf_fit_data["bin_low"].append(lower_bin_edge)
+        sf_fit_data["bin_high"].append(upper_bin_edge)
+        sf_fit_data["bin_center"].append((upper_bin_edge+lower_bin_edge)/2)
+        sf_fit_data["mu"].append(popt[1])
+        sf_fit_data["sigma"].append(popt[2])
+        axs[i].plot(bin_centers, gaus(bin_centers, *popt))
+        axs[i].set_xlabel("SF", fontsize=10)
+        axs[i].set_title(f"{round(lower_bin_edge,3)} GeV < {xaxis_name} < {round(upper_bin_edge,3)} GeV", fontsize=10)
+        axs[i].tick_params(axis='both', which='major', labelsize=10)
+    fig.tight_layout()
+    
+    if save_plots:
+        if plot_title is not None:
+            fig.suptitle(f"Sector {sector_number}", y = 1.01)
+        if plots_directory is not None:
+            plt.savefig(plots_directory+f"sector{sector_number}_gaussian_fit.png")
+    plt.close()
+    sf_fit_data_df = pd.DataFrame(sf_fit_data)
+    return sf_fit_data_df
+
+def apply_sampling_fraction_cut(events, save_plots = True, plots_directory = None, plot_title = None):
+
+    low_edep_bin = .6
+    high_edep_bin = 1.6
+    low_sf_bin = .1
+    high_sf_bin = .35
+    
+    events["reconstructed"] = ak.with_field(
+        events["reconstructed"],
+        events["reconstructed"]["E_PCAL"] + events["reconstructed"]["E_ECIN"] + events["reconstructed"]["E_ECOUT"],
+        "total_ecal_energy"
+    )
+
+    electrons = events["reconstructed"]
+    fig, axs = plt.subplots(3, 2, figsize=(18, 18))
+    axs = axs.flatten()
+    sampling_fraction_by_sector = []
+    edep_by_sector = []
+    edep_bins_by_sector = []
+    for sector in range(num_sectors):
+        sector_cut = electrons["sector"]==(sector+1)
+        sector_cut = (sector_cut)
+        total_ecal_energy = np.array(electrons["total_ecal_energy"][sector_cut])
+        sampling_fraction = np.array(electrons["SF"][sector_cut])
+        sampling_fraction_by_sector.append(sampling_fraction)
+        edep_by_sector.append(total_ecal_energy)
+        
+        _, edep_bins, _, mesh= axs[sector].hist2d(
+            total_ecal_energy,
+            sampling_fraction,
+            bins=(100,100),
+            range=[(low_edep_bin, high_edep_bin),(low_sf_bin, high_sf_bin)],
+            norm=colors.LogNorm())
+        edep_bins_by_sector.append(edep_bins)
+        axs[sector].set_xlabel("$E_{dep}$ (GeV)")
+        axs[sector].set_ylabel("$(E_{PCAL}+E_{ECIN}+E_{ECOUT})/P$")
+        axs[sector].set_title(f"Sector {sector+1}") 
+        divider = make_axes_locatable(axs[sector])
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        cbar = fig.colorbar(mesh, cax=cax)
+    fig.tight_layout()
+    if save_plots:
+        if plot_title is not None:
+                plt.suptitle(plot_title, y=1.0)
+        if plots_directory is not None:
+            plt.savefig(plots_directory+"sector_SF_without_fit.png")
+    plt.close()
+
+    sf_fit_data_df_by_sector = []
+    popt_mu_by_sector, popt_sigma_by_sector = [], []
+    def sf_fit_function(x, a, b, c, d):
+        return a + b*x  + c*(x*x) + d*(x*x*x)
+    for sector in range(num_sectors):
+        sector_number = sector + 1
+        sf_df = sf_gaussians_by_sector(sampling_fraction_by_sector,
+                                    edep_by_sector,
+                                    edep_bins_by_sector,
+                                    sector_number,
+                                    SF_bins = (low_sf_bin, high_sf_bin),
+                                    xaxis_name="$E_{dep}$",
+                                    save_plots = save_plots,
+                                    plots_directory = plots_directory,
+                                    plot_title = plot_title)
+        sf_fit_data_df_by_sector.append(sf_df)
+
+        fig, axs = plt.subplots(1, 2, figsize=(15, 6))
+        fig.subplots_adjust(hspace=0.1, wspace=0.3)
+        sf_fit_data_df = sf_fit_data_df_by_sector[sector]
+        axs[0].scatter(sf_fit_data_df["bin_center"].tolist(), sf_fit_data_df["mu"].tolist())
+        axs[0].set_xlabel("bin center (GeV)")
+        axs[0].set_ylabel("SF $\mu$")
+        popt_mu, pcov_mu = curve_fit(sf_fit_function, sf_fit_data_df["bin_center"].tolist(), sf_fit_data_df["mu"].tolist(), p0=(.2, .001, .00001, .00001))
+        axs[0].plot(sf_fit_data_df["bin_center"].tolist(), sf_fit_function(np.array(sf_fit_data_df["bin_center"].tolist()), *popt_mu), color='red')
+        axs[1].scatter(sf_fit_data_df["bin_center"].tolist(), sf_fit_data_df["sigma"].tolist())
+        axs[1].set_xlabel("bin center (GeV)")
+        axs[1].set_ylabel("SF $\sigma$")
+        popt_sigma, pcov_sigma = curve_fit(sf_fit_function, sf_fit_data_df["bin_center"].tolist(), sf_fit_data_df["sigma"].tolist(), p0=(.002, .001, .00001, .00001))
+        axs[1].plot(sf_fit_data_df["bin_center"].tolist(), sf_fit_function(np.array(sf_fit_data_df["bin_center"].tolist()), *popt_sigma), color='red')
+        if save_plots:
+            if plot_title is not None:
+                    plt.suptitle(plot_title+f",Sector {sector_number}", y=1.0)
+            if plots_directory is not None:
+                plt.savefig(plots_directory+f"SF_mu_fits_sector{sector_number}.png")
+        plt.close()
+        popt_mu_by_sector.append(popt_mu)
+        popt_sigma_by_sector.append(popt_sigma)
+        
+    fig, axs = plt.subplots(3, 2, figsize=(18, 18))
+    axs = axs.flatten()
+
+    sf_mask_by_sector = []
+    for sector in range(num_sectors):
+        popt_mu = popt_mu_by_sector[sector]
+        popt_sigma = popt_sigma_by_sector[sector]
+        edep = edep_by_sector[sector]
+        sampling_fraction = sampling_fraction_by_sector[sector]
+        sf_fit_data_df = sf_fit_data_df_by_sector[sector]
+        
+        fit_mu = sf_fit_function(edep, *popt_mu)
+        fit_sigma = sf_fit_function(edep, *popt_sigma)
+        SF_mask = (sampling_fraction < (fit_mu + 3.5*fit_sigma)) & (sampling_fraction > (fit_mu - 3.5*fit_sigma))
+        sf_mask_by_sector.append(SF_mask)
+        
+        hist, edep_bins, sf_bins, mesh= axs[sector].hist2d(
+            edep,
+            sampling_fraction,
+            bins=(100,100),
+            range=[(0.3,2.1),(.15,.32)],
+            norm=colors.LogNorm()
+        )
+
+        edep_bin_centers = (edep_bins[:-1] + edep_bins[1:])/2
+        
+        axs[sector].set_xlabel("$E_{dep}$ (GeV)")
+        axs[sector].set_ylabel("$(E_{PCAL}+E_{ECIN}+E_{ECOUTT})/P$")
+        axs[sector].set_title(f"Sector {sector+1}") 
+        divider = make_axes_locatable(axs[sector])
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        cbar = fig.colorbar(mesh, cax=cax)
+
+        axs[sector].plot(edep_bin_centers.tolist(), sf_fit_function(np.array(edep_bin_centers.tolist()), *popt_mu), color='black')
+        axs[sector].plot(
+            edep_bin_centers.tolist(),
+            sf_fit_function(np.array(edep_bin_centers.tolist()), *popt_mu) + 3.5*sf_fit_function(np.array(edep_bin_centers.tolist()), *popt_sigma),
+            color='red'
+        )
+        axs[sector].plot(
+            edep_bin_centers.tolist(),
+            sf_fit_function(np.array(edep_bin_centers.tolist()), *popt_mu) - 3.5*sf_fit_function(np.array(edep_bin_centers.tolist()), *popt_sigma),
+            color='red'
+        )
+
+    fig.tight_layout()
+    if save_plots:
+        if plot_title is not None:
+                plt.suptitle(plot_title, y=1.0)
+        if plots_directory is not None:
+            plt.savefig(plots_directory+"sector_SF_with_fit.png")
+    plt.close()
+    
+    masked_events = ak.Array([])
+    for sector in range(num_sectors):
+        sector_mask = events["reconstructed"]["sector"]==(sector+1)
+        masked_events_in_sector = events[sector_mask][sf_mask_by_sector[sector]]
+        masked_events = ak.concatenate((masked_events, masked_events_in_sector))
+
+    print(f"Have {len(masked_events)} events after SF cuts")
     return masked_events

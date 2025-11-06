@@ -72,6 +72,42 @@ BRANCHES_TO_SAVE:
   - y
   - W
 
+ELECTRON_SELECTION_BRANCHES_TO_SAVE:
+  - p_x
+  - p_y
+  - p_z
+  - p
+  - v_x
+  - v_y
+  - v_z
+  - theta_degrees
+  - phi_degrees
+  - sector
+  - E_PCAL
+  - E_ECIN
+  - E_ECOUT
+  - SF
+  - PCAL_U
+  - PCAL_V
+  - PCAL_W
+  - DC_region1_x
+  - DC_region1_y
+  - DC_region1_z
+  - DC_region1_edge
+  - DC_region2_x
+  - DC_region2_y
+  - DC_region2_z
+  - DC_region2_edge
+  - DC_region3_x
+  - DC_region3_y
+  - DC_region3_z
+  - DC_region3_edge
+  - Q2
+  - nu
+  - x
+  - y
+  - W
+
 MC_BRANCHES_TO_OPEN:
   - MC_pid
   - MC_px
