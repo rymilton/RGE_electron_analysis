@@ -7,7 +7,7 @@ import time
 import h5py as h5
 import os
 from utils import LoadYaml, open_data
-from selection_functions import apply_kinematic_cuts, apply_fiducial_cuts
+from selection_functions import apply_kinematic_cuts, apply_fiducial_cuts, apply_partial_sampling_fraction_cut
 
 
 def parse_arguments():
@@ -61,6 +61,13 @@ def parse_arguments():
         default=False,
         help="Save the plots that are generated during the analysis",
     )
+    parser.add_argument(
+        "--simulation",
+        action="store_true",
+        default=False,
+        help="Use this flag if you're using simulated data rather than actual data",
+    )
+
 
     flags = parser.parse_args()
 
@@ -90,8 +97,22 @@ def main():
         plot_title = "RGE LD2 + C: clasdis simulation solid"
     else:
         plot_title = None
-    events_array = apply_fiducial_cuts(events_array, parameters["ELECTRON_FIDUCIAL_CUTS"], flags.save_plots, flags.plots_directory, plot_title)
+    events_array = apply_fiducial_cuts(
+        events = events_array,
+        fiducial_cuts = parameters["ELECTRON_FIDUCIAL_CUTS"],
+        save_plots = flags.save_plots,
+        plots_directory = flags.plots_directory,
+        plot_title = plot_title,
+    )
+    
     # Apply partial sampling fraction cuts
+    events_array = apply_partial_sampling_fraction_cut(
+        events = events_array,
+        is_simulation = flags.simulation,
+        save_plots = flags.save_plots,
+        plots_directory = flags.plots_directory,
+        plot_title = plot_title,
+    )
     # Apply SF cuts
     # Save the cut electrons. Should have the option to cut on targets or not
     
