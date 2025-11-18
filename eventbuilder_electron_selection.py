@@ -97,17 +97,26 @@ def calc_W2(p, beam_E, theta):
 
 def get_DIS_quantities(events):
     E_beam = 10.547
+    # Removing events where the reconstructed electron has a momentum higher than the beam energy
+    events = events[events["reconstructed"]["p"]<=E_beam]
+    print(f"Have {len(events)} after removing electrons with momentum > Ebeam")
     electrons = events["reconstructed"]
-    electrons["Q2"] = calc_Q2(electrons["p"], E_beam, electrons["theta"])
     electrons["nu"] = calc_nu(electrons["p"], E_beam)
+    electrons["Q2"] = calc_Q2(electrons["p"], E_beam, electrons["theta"])
     electrons["x"] = calc_xb(electrons["Q2"], E_beam, electrons["nu"])
     electrons["y"] = calc_y(electrons["p"], E_beam)
-    electrons["W"] = np.sqrt(calc_W2(electrons["p"], E_beam, electrons["theta"]))
-    
+    # Caluclating W2 and only keeping events with positive W2
+    W2 = calc_W2(electrons["p"], E_beam, electrons["theta"])
+    valid_W2_mask = W2>0
+    electrons = electrons[valid_W2_mask]
+    print(f"Have {len(electrons)} after removing electrons negative W2 values")
+    electrons["W"] = np.sqrt(W2[valid_W2_mask])
     electrons["theta_degrees"] = electrons["theta"]*180/np.pi
     electrons["phi_degrees"] = electrons["phi"]*180/np.pi
 
+    events = events[valid_W2_mask]
     events["reconstructed"] = electrons
+
     return events
 def get_DIS_quantities_MC(events):
     E_beam = 10.547
