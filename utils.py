@@ -47,13 +47,24 @@ def save_output(
 ):
     reconstructed_dictionary = {}
     print("Saving reconstructed electrons")
+    reconstructed_fields = events["reconstructed"].fields
     for field in branches_to_save:
+        if field not in reconstructed_fields:
+            print(f"{field} not in reconstructed particles. Skipping")
+            continue
         reconstructed_dictionary[field] = events["reconstructed"][field]
+    if "pass_reco" in events.fields:
+        reconstructed_dictionary["pass_reco"] = events["pass_reco"]
     if save_MC:
+        print("Saving MC electrons")
         MC_dictionary = {}
+        MC_fields = events["MC"].fields
         for field in MC_branches_to_save:
+            if field not in MC_fields:
+                print(f"{field} not in MC particles. Skipping")
+                continue
             MC_dictionary[field] = events["MC"][field]
-    
+        
     os.makedirs(output_directory, exist_ok=True)
     full_output_path = os.path.join(output_directory, output_file)
 

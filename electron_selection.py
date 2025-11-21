@@ -99,7 +99,10 @@ def main():
     # Apply fiducial cuts
     if flags.save_plots:
         os.makedirs(flags.plots_directory, exist_ok=True)
-        plot_title = "RGE LD2 + C: clasdis simulation solid"
+        if flags.simulation:
+            plot_title = "RGE LD2 + C : clasdis simulation solid"
+        else:
+            plot_title = "RGE LD2 + C: 20131-20176 pass 0.9"
     else:
         plot_title = None
     events_array = apply_fiducial_cuts(
