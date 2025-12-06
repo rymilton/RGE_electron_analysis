@@ -54,6 +54,7 @@ def save_output(
             continue
         reconstructed_dictionary[field] = events["reconstructed"][field]
     if "pass_reco" in events.fields:
+        print("saving pass reco")
         reconstructed_dictionary["pass_reco"] = events["pass_reco"]
     if save_MC:
         print("Saving MC electrons")

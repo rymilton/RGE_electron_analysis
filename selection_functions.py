@@ -588,3 +588,154 @@ def apply_sampling_fraction_cut(events, save_plots = True, plots_directory = Non
     events["pass_reco"] = new_pass_reco_mask
     print(f"Have {ak.sum(events['pass_reco'])} events after SF cuts")
     return events
+
+def apply_target_selection(events, solid_target_name, save_plots = True, plots_directory = None, plot_title = None):
+
+    def double_gaussian(x, amp1, mean1, sigma1, amp2, mean2, sigma2):
+        return amp1 * np.exp( -(x - mean1)**2 / (2*sigma1) ) + \
+            amp2 * np.exp( -(x - mean2)**2 / (2*sigma2) )
+    
+    if save_plots:
+        fig, axs = plt.subplots(3, 2, figsize=(18, 18))
+        axs = axs.flatten()
+    num_sectors = 6
+    z_fit_parameters_all_sectors = []
+    
+    electrons = events["reconstructed"]
+    for sector in range(num_sectors):
+
+        sector_cut = (electrons["sector"]==(sector+1)) & (events["pass_reco"])
+        
+        vertex_z = np.array(electrons["v_z"][sector_cut])
+        vertex_z_counts, vertex_z_bins = np.histogram(
+            vertex_z,
+            bins=100,
+            range=(-12,5),
+        )
+        vertex_z_bin_centers = (vertex_z_bins[:-1] + vertex_z_bins[1:])/2
+        lower_fit_range = -12
+        upper_fit_range = 12
+
+        amplitude_guess = np.max(vertex_z_counts)
+        mean_z_guess = ak.mean(vertex_z)
+        std_z_guess = ak.std(vertex_z)
+        
+        z_fit_parameters, z_fit_covariance = curve_fit(
+            double_gaussian,
+            vertex_z_bin_centers,
+            vertex_z_counts, 
+            p0=(amplitude_guess, -7, 2.5, amplitude_guess, -1.5, 1.5))
+        y_fit = double_gaussian(vertex_z_bin_centers, *z_fit_parameters)
+        z_fit_parameters_all_sectors.append(z_fit_parameters)
+
+        if save_plots:
+            axs[sector].hist(
+                vertex_z,
+                bins=100,
+                range=(-12,5),
+                histtype='step'
+            )
+            axs[sector].plot(vertex_z_bin_centers, y_fit, color='r')
+            axs[sector].set_xlabel("$v_{z}$ (cm)")
+            axs[sector].set_title(f"Sector {sector+1}") 
+    if save_plots:
+        fig.tight_layout()
+        if plot_title is not None:
+            plt.suptitle(plot_title, y=1.0)
+        if plots_directory is not None:
+            plt.savefig(plots_directory+"zvertex_fits.png")
+
+    deuterium_mean_by_sector, deuterium_sigma_by_sector = [], []
+    solid_mean_by_sector, solid_sigma_by_sector = [], []
+
+    if save_plots:
+        fig, axs = plt.subplots(3, 2, figsize=(18, 18))
+        axs = axs.flatten()
+    for sector in range(num_sectors):
+        z_fit_parameters = z_fit_parameters_all_sectors[sector]
+        sector_cut = (electrons["sector"]==(sector+1)) & (events["pass_reco"])
+        
+        vertex_z = np.array(electrons["v_z"][sector_cut])
+        vertex_z_counts, vertex_z_bins = np.histogram(
+            vertex_z,
+            bins=100,
+            range=(-12,5),
+        )
+        vertex_z_bin_centers = (vertex_z_bins[:-1] + vertex_z_bins[1:])/2
+        deuterium_z_mean = min(z_fit_parameters[1], z_fit_parameters[4])
+        if deuterium_z_mean == z_fit_parameters[1]:
+            deuterium_z_sigma = z_fit_parameters[2]
+            solid_z_mean, solid_z_sigma = z_fit_parameters[4], z_fit_parameters[5]
+        elif deuterium_z_mean == z_fit_parameters[4]:
+            deuterium_z_sigma = z_fit_parameters[5]
+            solid_z_mean, solid_z_sigma = z_fit_parameters[1], z_fit_parameters[2]
+        
+        deuterium_cut = (vertex_z > (deuterium_z_mean - 3 * deuterium_z_sigma) ) &\
+                        (vertex_z < (deuterium_z_mean + 3 * deuterium_z_sigma) )
+        solid_cut     = (vertex_z > (solid_z_mean - 5 * solid_z_sigma) ) &\
+                        (vertex_z < (solid_z_mean + 5 * solid_z_sigma) )
+        deuterium_mean_by_sector.append(deuterium_z_mean)
+        deuterium_sigma_by_sector.append(deuterium_z_sigma)
+        solid_mean_by_sector.append(solid_z_mean)
+        solid_sigma_by_sector.append(solid_z_sigma)
+        
+        if save_plots:
+            axs[sector].hist(
+                vertex_z,
+                bins=100,
+                range=(-12,5),
+                histtype='step'
+            )
+            axs[sector].hist(vertex_z[deuterium_cut],
+                bins = 100,
+                range=(-12, 5),
+                color='b',
+                label="LD2",
+                alpha=.8)
+            axs[sector].hist(vertex_z[solid_cut],
+                    bins = 100,
+                    range=(-12, 5),
+                    color='r',
+                    label=solid_target_name,
+                    alpha=.8)
+            
+            axs[sector].set_xlabel("$v_{z}$ (cm)")
+            axs[sector].set_title(f"Sector {sector+1}") 
+            axs[sector].legend(loc='upper left')
+    if save_plots:
+        fig.tight_layout()
+        if plot_title is not None:
+            plt.suptitle(plot_title, y=1.0)
+        if plots_directory is not None:
+            plt.savefig(plots_directory+"target_selections.png")
+
+    deuterium_mask = np.ones(len(events["pass_reco"]), dtype=bool)
+    solid_mask = np.ones(len(events["pass_reco"]), dtype=bool)
+    for sector in range(num_sectors):
+        sector_mask = (electrons["sector"]==(sector+1))
+        vertex_z_in_sector = electrons["v_z"][sector_mask]
+        deuterium_mask_in_sector = (vertex_z_in_sector > (deuterium_mean_by_sector[sector] - 3*deuterium_sigma_by_sector[sector]) ) &\
+                         (vertex_z_in_sector < (deuterium_mean_by_sector[sector] + 3 * deuterium_sigma_by_sector[sector]) )
+        solid_mask_in_sector = (vertex_z_in_sector > (solid_mean_by_sector[sector] - 5*solid_sigma_by_sector[sector]) ) &\
+                         (vertex_z_in_sector < (solid_mean_by_sector[sector] + 5 * solid_sigma_by_sector[sector]) )
+        
+
+        deuterium_mask[sector_mask] = (events["pass_reco"][sector_mask]) & (deuterium_mask_in_sector)
+        solid_mask[sector_mask] = (events["pass_reco"][sector_mask]) & (solid_mask_in_sector)
+
+
+    events["pass_reco"] = (deuterium_mask) | (solid_mask)
+    target = np.empty(len(events), dtype=object)
+    target[deuterium_mask] = "LD2"
+    target[solid_mask] = solid_target_name
+    target[(~deuterium_mask)&(~solid_mask)] = "None"
+
+    events["reconstructed"] = ak.with_field(
+        events["reconstructed"],
+        target.tolist(),
+        "target"
+    )
+
+    print(f"Have {ak.sum(events['pass_reco'])} events after target selection cuts")
+
+    return events

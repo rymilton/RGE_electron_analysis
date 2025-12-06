@@ -73,7 +73,18 @@ def parse_arguments():
         default=False,
         help="Use this flag if you're using simulated data rather than actual data",
     )
-
+    parser.add_argument(
+        "--target_selection",
+        action="store_true",
+        default=False,
+        help="Enable the fitting of the z-vertex to get the liquid and solid targets",
+    )
+    parser.add_argument(
+        "--solid_target",
+        default="C",
+        help="Name of solid target",
+        type=str,
+    )
 
     flags = parser.parse_args()
 
@@ -128,6 +139,18 @@ def main():
         plots_directory = flags.plots_directory,
         plot_title = plot_title,
     )
+
+    if flags.target_selection:
+        if flags.simulation:
+            print("Target selection is not supported for simulated data. Skipping the target selection.")
+        else:
+            events_array = apply_target_selection(
+                events = events_array,
+                solid_target_name = flags.solid_target,
+                save_plots = flags.save_plots,
+                plots_directory = flags.plots_directory,
+                plot_title = plot_title,
+            )
     # Save the cut electrons. Should have the option to cut on targets or not
     save_output(
         events_array,

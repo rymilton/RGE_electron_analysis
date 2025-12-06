@@ -107,6 +107,7 @@ ELECTRON_SELECTION_BRANCHES_TO_SAVE:
   - x
   - y
   - W
+  - target
 
 MC_BRANCHES_TO_OPEN:
   - MC_pid
@@ -143,8 +144,8 @@ ELECTRON_KINEMATIC_CUTS:
   - p < 8
 
 ELECTRON_FIDUCIAL_CUTS:
-  - PCAL_W > 13.5
-  - PCAL_V > 13.5
+  - PCAL_W > 14
+  - PCAL_V > 14
   - DC_region1_edge > 4.5
   - DC_region2_edge > 3.5
   - DC_region3_edge > 7.5
