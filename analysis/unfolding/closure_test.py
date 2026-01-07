@@ -178,7 +178,7 @@ def main():
             open_MC=True,
             MC_branches_to_open=MC_BRANCHES_TO_LOAD,
             MC_tree_name="MC_electrons",
-            nmax=flags.num_events,
+            nmax=None,
             output_format="dictionary"
         )
         if "solid" in name:
@@ -196,7 +196,7 @@ def main():
             open_MC=True,
             MC_branches_to_open=MC_BRANCHES_TO_LOAD,
             MC_tree_name="MC_electrons",
-            nmax=flags.num_events,
+            nmax=None,
             output_format="dictionary"
         )
         if "solid" in name:
