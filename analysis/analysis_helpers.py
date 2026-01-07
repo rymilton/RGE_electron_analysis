@@ -2,6 +2,7 @@ import ROOT
 import numpy as np
 import yaml
 import matplotlib.pyplot as plt
+from analysis_dataloader import AnalysisDataloader
 
 def DivideWithErrors(numerator, numerator_error, dividend, dividend_error):
     quotient = numerator/dividend
@@ -58,3 +59,71 @@ def plot_unfolded(
     plt.suptitle(title)
     plt.savefig(outfile)
     plt.close()
+
+def unfolding_procedure(
+    flags,
+    simulation_dataloader,
+    data_dataloader,
+    variables_to_unfold,
+):
+
+    if not flags.load_omnifold_model:
+        print("Setting up training data dictionaries")
+        simulation_training = simulation_dataloader.get_training_data()
+        data_training = data_dataloader.get_training_data()
+
+
+        sim_MCreco_dict_train, sim_MCgen_dict_train, data_dict_train = {}, {}, {}
+        for variable in variables_to_unfold:
+            sim_MCreco_dict_train[variable] = np.array(simulation_training[0][variable])
+            sim_MCgen_dict_train[variable] = np.array(simulation_training[1][f"MC_{variable}"])
+            data_dict_train[variable] = np.array(data_training[0][variable])
+        df_MCgen_train = ROOT.RDF.FromNumpy(sim_MCgen_dict_train)
+        df_MCreco_train = ROOT.RDF.FromNumpy(sim_MCreco_dict_train)
+        df_measured_train = ROOT.RDF.FromNumpy(data_dict_train)
+        sim_pass_reco_vector_train = np_to_TVector(simulation_training[2])
+        data_pass_reco_vector_train = np_to_TVector(data_training[2])
+
+        print("Training omnifold model")
+        unbinned_unfolding = ROOT.RooUnfoldOmnifold()
+        unbinned_unfolding.SetSaveDirectory("./")
+        unbinned_unfolding.SetModelSaveName("clasdis_gibuu_closure")
+        unbinned_unfolding.SetMCgenDataFrame(df_MCgen_train)
+        unbinned_unfolding.SetMCrecoDataFrame(df_MCreco_train)
+        unbinned_unfolding.SetMCPassReco(sim_pass_reco_vector_train)
+        unbinned_unfolding.SetMeasuredDataFrame(df_measured_train)
+        unbinned_unfolding.SetMeasuredPassReco(data_pass_reco_vector_train)
+        unbinned_unfolding.SetNumIterations(flags.num_iterations)
+        _ = unbinned_unfolding.UnbinnedOmnifold()
+
+    simulation_testing = simulation_dataloader.get_testing_data()
+    data_testing = data_dataloader.get_testing_data()
+
+    sim_MCreco_dict_test, sim_MCgen_dict_test, data_dict_test = {}, {}, {}
+    for variable in variables_to_unfold:
+        sim_MCreco_dict_test[variable] = np.array(simulation_testing[0][variable])
+        sim_MCgen_dict_test[variable] = np.array(simulation_testing[1][f"MC_{variable}"])
+        data_dict_test[variable] = np.array(data_testing[0][variable])
+    df_MCgen_test = ROOT.RDF.FromNumpy(sim_MCgen_dict_test)
+    df_MCreco_test = ROOT.RDF.FromNumpy(sim_MCreco_dict_test)
+    df_measured_test = ROOT.RDF.FromNumpy(data_dict_test)
+    sim_pass_reco_vector_test = np_to_TVector(simulation_testing[2])
+    data_pass_reco_vector_test = np_to_TVector(data_testing[2])
+
+    model_name = "clasdis_gibuu_closure" if flags.model_path is None else flags.model_path
+    
+    unbinned_unfolding = ROOT.RooUnfoldOmnifold()
+    unbinned_unfolding.SetTestMCgenDataFrame(df_MCgen_test)
+    unbinned_unfolding.SetTestMCrecoDataFrame(df_MCreco_test)
+    unbinned_unfolding.SetTestMCPassReco(sim_pass_reco_vector_test)
+    unbinned_unfolding.SetLoadModelPath(f"{model_name}_iteration_0.pkl")
+    test_unbinned_results = unbinned_unfolding.TestUnbinnedOmnifold()
+    step1_weights = TVector_to_np(ROOT.std.get[0](test_unbinned_results))
+    unbinned_unfolding.SetTestMCgenDataFrame(df_MCgen_test)
+    unbinned_unfolding.SetTestMCrecoDataFrame(df_MCreco_test)
+    unbinned_unfolding.SetTestMCPassReco(sim_pass_reco_vector_test)
+    unbinned_unfolding.SetLoadModelPath(f"{model_name}_iteration_{flags.num_iterations-1}.pkl")
+    test_unbinned_results = unbinned_unfolding.TestUnbinnedOmnifold()
+    step2_weights = TVector_to_np(ROOT.std.get[1](test_unbinned_results))
+
+    return step1_weights, step2_weights
