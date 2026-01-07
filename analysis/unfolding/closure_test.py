@@ -290,11 +290,15 @@ def main():
     plt.figure()
     plt.hist(step1_weights, bins=100)
     plt.xlabel("Iteration 1 Step 1 weights")
+    plt.ylabel("Counts")
+    plt.title(plot_title)
     plt.savefig(os.path.join(flags.plot_directory, "gibuu_clasdis_closure_iteration1_step1weights.png"))
 
     plt.figure()
     plt.hist(step2_weights, bins=100)
     plt.xlabel(f"Iteration {flags.num_iterations} Step 2 weights")
+    plt.ylabel("Counts")
+    plt.title(plot_title)
     plt.savefig(os.path.join(flags.plot_directory, f"gibuu_clasdis_closure_iteration{flags.num_iterations}_step2weights.png"))
 
     # Define binning and labels for each variable
@@ -312,8 +316,10 @@ def main():
         plot_unfolded(
             simulation_dataloader.reconstructed[var][simulation_dataloader.pass_reco_test],
             pseudodata_dataloader.reconstructed[var][pseudodata_dataloader.pass_reco_test],
-            simulation_dataloader.reconstructed[var][simulation_dataloader.pass_reco_test],
             step1_weights[simulation_dataloader.pass_reco_test],
+            f"{simulation_dataloader.data_name} Reconstructed",
+            f"{pseudodata_dataloader.data_name} Reconstructed",
+            f"{simulation_dataloader.data_name} with Step 1 weights",
             cfg["bins"], cfg["range"],
             cfg["xlabel"], plot_title,
             f"{flags.plot_directory}/{flags.MC_name}_{flags.pseudodata_name}_closure_iteration1_step1_{var}.png"
@@ -322,8 +328,10 @@ def main():
         plot_unfolded(
             simulation_dataloader.MC["MC_" + var][simulation_dataloader.pass_truth_test],
             pseudodata_dataloader.MC["MC_" + var][pseudodata_dataloader.pass_truth_test],
-            simulation_dataloader.MC["MC_" + var][simulation_dataloader.pass_truth_test],
             step2_weights[simulation_dataloader.pass_truth_test],
+            f"{simulation_dataloader.data_name} Truth",
+            f"{pseudodata_dataloader.data_name} Truth",
+            f"Unfolded {pseudodata_dataloader.data_name}",
             cfg["bins"], cfg["range"],
             cfg["xlabel"], plot_title,
             f"{flags.plot_directory}/{flags.MC_name}_{flags.pseudodata_name}_closure_iteration{flags.num_iterations}_step2_{var}.png"

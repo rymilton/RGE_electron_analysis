@@ -20,43 +20,109 @@ def TVector_to_np(vector):
     return np.array(out_array)
 
 def plot_unfolded(
-    sim_vals, data_vals, unfolded_vals, weights,
-    bins, rng, xlabel, title, outfile
+    sim_vals, data_vals, unfolding_weights,
+    sim_label, data_label, unfolded_label,
+    bins, binning_range, xlabel, title, outfile
 ):
-    counts_sim, edges = np.histogram(sim_vals, bins=bins, range=rng)
-    counts_data, _ = np.histogram(data_vals, bins=bins, range=rng)
+    counts_sim, edges = np.histogram(sim_vals, bins=bins, range=binning_range)
+    counts_data, _ = np.histogram(data_vals, bins=bins, range=binning_range)
     counts_unf, _ = np.histogram(
-        sim_vals, bins=bins, range=rng, weights=weights
+        sim_vals, bins=bins, range=binning_range, weights=unfolding_weights
     )
 
     centers = 0.5 * (edges[1:] + edges[:-1])
     width = np.diff(edges)
 
-    norm = lambda c: c / (np.sum(c) * width)
 
-    fig, (ax, rax) = plt.subplots(
-        2, 1, sharex=True,
-        gridspec_kw={"height_ratios": [2, 1]}
+    fig, axs = plt.subplots(2, 1, figsize=(10, 10), sharex=True, gridspec_kw={
+        'height_ratios': [2, 1],   # top panel bigger
+        'hspace': 0.05             # reduce space between panels
+    })
+    axs = axs.flatten()
+
+    axs[0].hist(
+        sim_vals,
+        bins=bins,
+        range=binning_range,
+        density=True,
+        label=sim_label,
+        histtype="step",
+        color="#2ca02c",
+        linewidth=2,
     )
 
-    ax.step(centers, norm(counts_sim), where="mid", label="MC")
-    ax.step(centers, norm(counts_data), where="mid", label="Data")
-    ax.errorbar(centers, norm(counts_unf), yerr=np.sqrt(counts_unf), fmt="o")
-
-    ratio, ratio_err = DivideWithErrors(
-        norm(counts_sim), np.sqrt(counts_sim),
-        norm(counts_unf), np.sqrt(counts_unf)
+    axs[0].hist(
+        data_vals,
+        bins=bins,
+        range=binning_range,
+        density=True,
+        label=data_label,
+        histtype="step",
+        color="#ff7f0e",
+        linewidth=2,
     )
 
-    rax.errorbar(centers, ratio, yerr=ratio_err, fmt="o")
-    rax.axhline(1, ls="--")
+    norm = lambda value, sum_variable: value / (np.sum(sum_variable) * width)
 
-    ax.set_ylabel("Normalized")
-    rax.set_xlabel(xlabel)
-    rax.set_ylabel("MC / Unfolded")
-    ax.legend()
+    unfolded_errors = np.sqrt(counts_unf)
+    normalized_unfolded_counts = norm(counts_unf, counts_unf)
+    normalized_unfolded_errors = norm(unfolded_errors, counts_unf)
+    axs[0].errorbar(
+        centers,
+        normalized_unfolded_counts,
+        yerr=normalized_unfolded_errors,
+        fmt="o",
+        label=unfolded_label,
+        color="#1f77b4",
+        markersize=7,
+    )
 
-    plt.suptitle(title)
+    axs[0].set_ylabel("Normalized Entries")
+    axs[0].legend(loc="upper right")
+
+    normalized_sim_counts = norm(counts_sim, counts_sim)
+    normalized_sim_errors = norm(np.sqrt(counts_sim), counts_sim)
+    normalized_data_counts = norm(counts_data, counts_data)
+    normalized_data_errors = norm(np.sqrt(counts_data), counts_data)
+
+    sim_truth_ratio, sim_truth_ratio_err = DivideWithErrors(
+        normalized_sim_counts,
+        normalized_sim_errors,
+        normalized_unfolded_counts,
+        normalized_unfolded_errors,
+    )
+    data_truth_ratio, data_truth_ratio_err = DivideWithErrors(
+        normalized_data_counts,
+        normalized_data_errors,
+        normalized_unfolded_counts,
+        normalized_unfolded_errors,
+    )
+
+    axs[1].errorbar(
+        centers,
+        sim_truth_ratio,
+        yerr=sim_truth_ratio_err,
+        fmt="o",
+        color="#2ca02c",
+        markersize=7,
+    )
+
+    axs[1].errorbar(
+        centers,
+        data_truth_ratio,
+        yerr=data_truth_ratio_err,
+        fmt="o",
+        color="#ff7f0e",
+        markersize=7,
+    )
+    axs[1].axhline(1.0, color="red", linestyle="--", linewidth=1.5)
+    axs[1].set_ylabel("Counts/Unfolded")
+    axs[1].set_xlabel(xlabel)
+    axs[1].set_ylim(0.5, 1.5)
+
+    plt.tight_layout()
+
+    plt.suptitle(title, y=.95)
     plt.savefig(outfile)
     plt.close()
 
