@@ -131,6 +131,7 @@ def unfolding_procedure(
     simulation_dataloader,
     data_dataloader,
     variables_to_unfold,
+    new_model_name =  None
 ):
 
     if not flags.load_omnifold_model:
@@ -153,7 +154,8 @@ def unfolding_procedure(
         print("Training omnifold model")
         unbinned_unfolding = ROOT.RooUnfoldOmnifold()
         unbinned_unfolding.SetSaveDirectory("./")
-        unbinned_unfolding.SetModelSaveName("clasdis_gibuu_closure")
+        model_name = new_model_name if new_model_name is not None else "clasdis_gibuu_closure"
+        unbinned_unfolding.SetModelSaveName(model_name)
         unbinned_unfolding.SetMCgenDataFrame(df_MCgen_train)
         unbinned_unfolding.SetMCrecoDataFrame(df_MCreco_train)
         unbinned_unfolding.SetMCPassReco(sim_pass_reco_vector_train)
@@ -176,7 +178,8 @@ def unfolding_procedure(
     sim_pass_reco_vector_test = np_to_TVector(simulation_testing[2])
     data_pass_reco_vector_test = np_to_TVector(data_testing[2])
 
-    model_name = "clasdis_gibuu_closure" if flags.model_path is None else flags.model_path
+    new_model_name = new_model_name if new_model_name is not None else "clasdis_gibuu_closure"
+    model_name = new_model_name if flags.model_path is None else flags.model_path
     
     unbinned_unfolding = ROOT.RooUnfoldOmnifold()
     unbinned_unfolding.SetTestMCgenDataFrame(df_MCgen_test)

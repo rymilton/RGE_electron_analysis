@@ -28,9 +28,7 @@ class AnalysisDataloader:
             self.shuffle_data()
 
         self.setup_reconstructed()
-
-        if self.MC is not None:
-            self.setup_MC()
+        self.setup_MC()
         
         if train_test_split:
             self.create_train_test_split(test_fraction)
@@ -38,6 +36,9 @@ class AnalysisDataloader:
         
 
     def setup_MC(self):
+        if self.MC is None:
+            self.pass_truth = None
+            return
         self.MC["MC_p"] = np.sqrt(self.MC["MC_px"]**2 + self.MC["MC_py"]**2 + self.MC["MC_pz"]**2)
         self.pass_truth = (
             (self.MC["MC_p"] > 2) &
@@ -67,10 +68,13 @@ class AnalysisDataloader:
             self.MC_test = self.MC[:num_test]
             self.pass_truth_train = self.pass_truth[num_test:]
             self.pass_truth_test = self.pass_truth[:num_test]
+        else:
+            self.MC_train = None
+            self.MC_test = None
+            self.pass_truth_train = None
+            self.pass_truth_test = None
     
     def get_training_data(self):
-        if self.MC is None:
-            raise ValueError("MC data not provided -- cannot get unfolding training data")
         if self.train_test_split:
             return (
                 self.reconstructed_train,
@@ -86,8 +90,6 @@ class AnalysisDataloader:
                 self.pass_truth,
             )
     def get_testing_data(self):
-        if self.MC is None:
-            raise ValueError("MC data not provided -- cannot get unfolding testing data")
         if self.train_test_split:
             return (
                 self.reconstructed_test,
