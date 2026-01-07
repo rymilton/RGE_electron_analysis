@@ -252,6 +252,7 @@ def main():
     plt.suptitle(f"{simulation_dataloader.data_name} Truth-level phase space")
     # Saving figure to plots_dir
     plt.savefig(os.path.join(flags.plot_directory, f"{simulation_dataloader.data_name}_truth_phasespace.png"))
+    plt.close()
 
     fig = plt.figure()
     plt.hist2d(np.array(pseudodata_dataloader.MC["MC_x"]), np.array(pseudodata_dataloader.MC["MC_Q2"]), bins=100, range=((0,1), (1,12)), label="GiBUU", norm=mcolors.LogNorm())
@@ -260,6 +261,7 @@ def main():
     plt.colorbar()
     plt.suptitle(f"{pseudodata_dataloader.data_name} Truth-level phase space")
     plt.savefig(os.path.join(flags.plot_directory, f"{pseudodata_dataloader.data_name}_truth_phasespace.png"))
+    plt.close()
 
     fig = plt.figure()
     plt.hist2d(np.array(simulation_dataloader.MC["MC_x"][simulation_dataloader.pass_truth]), np.array(simulation_dataloader.MC["MC_Q2"][simulation_dataloader.pass_truth]), bins=100, range=((0,1), (1,12)), label="clasdis", norm=mcolors.LogNorm())
@@ -268,6 +270,7 @@ def main():
     plt.colorbar()
     plt.suptitle(f"{simulation_dataloader.data_name} Truth-level phase space")
     plt.savefig(os.path.join(flags.plot_directory, f"{simulation_dataloader.data_name}_truth_phasespace_passtruth.png"))
+    plt.close()
 
     fig = plt.figure()
     plt.hist2d(np.array(pseudodata_dataloader.MC["MC_x"][pseudodata_dataloader.pass_truth]), np.array(pseudodata_dataloader.MC["MC_Q2"][pseudodata_dataloader.pass_truth]), bins=100, range=((0,1), (1,12)), label="GiBUU", norm=mcolors.LogNorm())
@@ -276,6 +279,7 @@ def main():
     plt.colorbar()
     plt.suptitle(f"{pseudodata_dataloader.data_name} Truth-level phase space")
     plt.savefig(os.path.join(flags.plot_directory, f"{pseudodata_dataloader.data_name}_truth_phasespace_passtruth.png"))
+    plt.close()
 
     variables_to_unfold = parameters["UNFOLDING_VARIABLES"]
     print(f"Unfolding with variables: {variables_to_unfold}")
@@ -293,6 +297,7 @@ def main():
     plt.ylabel("Counts")
     plt.title(plot_title)
     plt.savefig(os.path.join(flags.plot_directory, "gibuu_clasdis_closure_iteration1_step1weights.png"))
+    plt.close()
 
     plt.figure()
     plt.hist(step2_weights, bins=100)
@@ -300,6 +305,7 @@ def main():
     plt.ylabel("Counts")
     plt.title(plot_title)
     plt.savefig(os.path.join(flags.plot_directory, f"gibuu_clasdis_closure_iteration{flags.num_iterations}_step2weights.png"))
+    plt.close()
 
     # Define binning and labels for each variable
     variable_settings = {
