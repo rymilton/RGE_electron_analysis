@@ -104,3 +104,20 @@ python RGE_unfolding.py \
 --test_fraction 0.2 \ # If train_test_split is enabled, the fraction of data to use for testing
 --plot_directory ./ # Path to save plots to
 ```
+
+## Cross sections
+I'm currently only calculating the cross sections for deuterium and carbon so far. 
+
+### Calculating differential cross section
+Once we do the unfolding, we can use the results to calculate the differential cross sections with respect to x and Q2. The notebook to do so is `./analysis/notebooks/RGE_absolute_cross_sections_with_unfolding.ipynb`. This notebook assumes you already have an unfolding model trained. This notebook outputs the cross sections for carbon and deuterium with unfolding and when just using the reconstructed RGE data. These are saved in .csv files. The formula to calculate the differential cross section is below
+<img width="558" height="114" alt="image" src="https://github.com/user-attachments/assets/6b3abd95-6dd2-49c7-8e29-89329c8a6adf" />
+
+$\Delta x$ and $\Delta Q^2$ are the bin widths, $N_i$ are the bin counts (which include unfolding weights), $R_i$ and $C_{c,i}$ are the radiative and Coulomb corrections from EXTERNALS, CPB is a conversion factor to get to pb, and $L_{int}$ is the integrated luminosity. To get the integrated luminosity, we need the charge and luminositry info. These can be found at these sites: [luminosity](https://clasweb.jlab.org/clas12online/timelines/rg-e/RGE2024_progress_all_lumi.html) and [charge](https://clasweb.jlab.org/clas12online/timelines/rg-e/RGE2024_progress_all_charge.html). However, if you're using a fraction of the data you need to calculate what fraction of the data you are using. To get your charge, use `calculate_charge.py`. The integrated luminosity is (charge used)/(total charge in runs) * (number of events used in analysis)/(number of total events before reconstruction cuts) * total integrated luminosity.
+
+
+### Comparing to theory cross sections
+To compare to theoretical cross section predictions, we use Yadism. To install yadism, do `pip install 'yadism[mark, box]'`. This code is tested with version [0.13.6](https://pypi.org/project/yadism/0.13.6/). The notebook to do the predictions is `./analysis/notebooks/RGE_yadism_crosssections.ipynb`. The PDF sets used are nCTEQ15HIX_FullNuc_12_6 and nCTEQ15HIX_FullNuc_2_1. We predict $F_2$, $xF_3$, and $F_L$ and use the below formula to get the cross sections
+
+<img width="664" height="131" alt="image" src="https://github.com/user-attachments/assets/190b0257-e018-499b-a37e-162e9e62b1be" />
+
+We then compare the theory cross sections and RGE cross sections in .
