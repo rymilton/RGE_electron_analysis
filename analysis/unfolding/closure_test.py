@@ -73,7 +73,7 @@ def parse_arguments():
     )
     parser.add_argument(
         "--train_test_split",
-        default=True,
+        default=False,
         help="Whether to split the data into training and testing sets",
         action="store_true"
     )
@@ -319,10 +319,16 @@ def main():
 
     for var in variables_to_unfold:
         cfg = variable_settings[var]
+
+        # Use the test data for plotting. If no train_test_split was done, this is the full dataset.
+        # get_testing_data() returns (reco, MC, pass_reco, pass_truth)
+        # If there's no MC, MC and pass_truth are None
+        simulation_testing_data = simulation_dataloader.get_testing_data()
+        pseudodata_testing_data = pseudodata_dataloader.get_testing_data()
         plot_unfolded(
-            simulation_dataloader.reconstructed[var][simulation_dataloader.pass_reco_test],
-            pseudodata_dataloader.reconstructed[var][pseudodata_dataloader.pass_reco_test],
-            step1_weights[simulation_dataloader.pass_reco_test],
+            simulation_testing_data[0][var][simulation_testing_data[2]],
+            pseudodata_testing_data[0][var][pseudodata_testing_data[2]],
+            step1_weights[simulation_testing_data[2]],
             f"{simulation_dataloader.data_name} Reconstructed",
             f"{pseudodata_dataloader.data_name} Reconstructed",
             f"{simulation_dataloader.data_name} with Step 1 weights",
@@ -332,9 +338,9 @@ def main():
         )
 
         plot_unfolded(
-            simulation_dataloader.MC["MC_" + var][simulation_dataloader.pass_truth_test],
-            pseudodata_dataloader.MC["MC_" + var][pseudodata_dataloader.pass_truth_test],
-            step2_weights[simulation_dataloader.pass_truth_test],
+            simulation_testing_data[1]["MC_" + var][simulation_testing_data[3]],
+            pseudodata_testing_data[1]["MC_" + var][pseudodata_testing_data[3]],
+            step2_weights[simulation_testing_data[3]],
             f"{simulation_dataloader.data_name} Truth",
             f"{pseudodata_dataloader.data_name} Truth",
             f"Unfolded {pseudodata_dataloader.data_name}",
