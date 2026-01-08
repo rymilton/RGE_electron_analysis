@@ -38,7 +38,7 @@ There are multiple steps in the electron selection procedure:
 3. Select electrons identified by the event builder
 4. Refine the electron selection
 
-Step 1 (converting .hipo to .root) uses code external to this repository at this time ([link here](https://github.com/sebouh137/clas12-rge-analysis/)). 
+Step 1 (converting .hipo to .root) uses code external to this repository at this time ([link here](https://github.com/sebouh137/clas12-rge-analysis/)). Example scripts to run the below steps are found in `scripts`.
 ### Tuple maker
 `tuple_maker.cpp` takes .root files as input and extracts the quantities that are relevant to this analysis. Every particle in each event is stored. The quantities that are stored can be seen in [these lines](https://github.com/rymilton/RGE_electron_analysis/blob/main/tuple_maker.cpp#L85-L98). In addition to these, the charge from the Faraday cup (fcupgated) and run number are saved. If desired, the Monte Carlo information for each particle is also saved. To run the code, do `root -l -b -q "tuple_maker.cpp+(\"${banks_directory}\", \"banks_${file_num}.root\", \"${tuples_directory}\", \"ntuples_${file_num}.root\", 0)"` where `${banks_directory}` and `banks_${file_num}.root` are the directory and file for the .root file after converting from .hipo, respectively. `${tuples_directory}` and `ntuples_${file_num}.root` are the output directory and output file, respectively. The final argument is `0` if you don't want to save Monte Carlo the information and `1` if you want to save it. This option should only be set to `1` if you're working with simulation files. 
 
@@ -48,7 +48,7 @@ Step 1 (converting .hipo to .root) uses code external to this repository at this
 Note: For the Monte Carlo electrons, the electron with the highest momentum is stored if there are multiple electrons in an event.
 
 ### Refining electron selection
-To improve the electron selection we apply further cuts. These include kinematic cuts (see `ELECTRON_KINEMATIC_CUTS` in `configs/config.yaml`) and fiducial cuts (see `ELECTRON_FIDUCIAL_CUTS` in `configs/config.yaml`), as well as a partial sampling fraction cut, a tightening of the sampling fraction vs. ECAL energy deposition cut, and for actual data, a z vertex cut to select the targets. More details can be found in the RGE common analysis note. 
+To improve the electron selection we apply further cuts. These include kinematic cuts (see `ELECTRON_KINEMATIC_CUTS` in `configs/config.yaml`) and fiducial cuts (see `ELECTRON_FIDUCIAL_CUTS` in `configs/config.yaml`), as well as a partial sampling fraction cut, a tightening of the sampling fraction vs. ECAL energy deposition cut, and for actual data, a z vertex cut to select the targets. More details can be found in the RGE common analysis note. Before running the electron selection, you should `hadd` the event builder electron files if your sample is not very large to ensure good fits.
 
 To run the code, do the following:
 ```
@@ -66,3 +66,41 @@ python electron_selection.py \
 ```
 The branches to save in the output file are listed in `ELECTRON_SELECTION_BRANCHES_TO_SAVE` in `configs/config.yaml`. Note that these cuts are applied only at reconstruction level. The cuts do not remove any electrons but are instead saved in the `pass_reco` field in the `reconstructed_electrons` branch in the output file. If the electron passes all of the selection cuts, `pass_reco` will be True, otherwise it'll be False.
 
+
+## Unfolding
+
+The unfolding in this analysis is unbinned and uses multiple observables at once. The unfolding variables can be set in `./analysis/unfolding_config.yaml`. This file also contains the simulation and data file paths after running the electron selection. There are two main unfolding scripts -- one for a closure test and one for unfolding the RGE data. Instructions for both are below.
+
+### Closure test
+To make sure the unfolding works as expected, we perform a closure test. We use two simulation datasets and treat one as simulation data and the other as pseudodata. After unfolding, we should get the truth of the pseudodata. Currently, the code only assumes GiBUU and clasdis files exist (see [here](https://github.com/rymilton/RGE_electron_analysis/blob/main/analysis/unfolding/closure_test.py#L144-L155)). It also assumes the simulation is split into two files -- one for solid target scattering and one for liquid target scattering. To run the code, do the following:
+```
+python closure_test.py \
+--roounfold_path /home/rmilton/work_dir/unbinned_unfolding/build/RooUnfold/ \ # Path to RooUnfold from unbinned_unfolding repository
+--load_omnifold_model \ # Enable loading a previously trained omnifold model
+--model_path \ # Path to the trained model. This should include the whole path EXCEPT for the _iteration.pkl portion. e.g. clasdis_gibuu_closure instead of clasdis_gibuu_closure_iteration_3.pkl
+--num_iterations 4 \ # Number of iterations for the unfolding
+--num_events 100000 \ # Number of events for each data sample (after combining the liquid and solid samples)
+--MC_name GiBUU \ # Sample to use as simulation
+--pseudodata_name clasdis \ # Sample to use as pseudodata
+--config ../unfolding_config.yaml \ # Path to config file
+--train_test_split \ # Enable if you want to split into train/test for unfolding
+--test_fraction 0.2 \ # If train_test_split is enabled, the fraction of data to use for testing
+--plot_directory ./ # Path to save plots to
+```
+### Data unfolding
+Once we verify that the closure test is working, we can unfold the actual data. The steps are very similar for this. The code is below:
+```
+python RGE_unfolding.py \
+--roounfold_path /home/rmilton/work_dir/unbinned_unfolding/build/RooUnfold/ \ # Path to RooUnfold from unbinned_unfolding repository
+--load_omnifold_model \ # Enable loading a previously trained omnifold model
+--model_path \ # Path to the trained model. This should include the whole path EXCEPT for the _iteration.pkl portion. e.g. clasdis_gibuu_closure instead of clasdis_gibuu_closure_iteration_3.pkl
+--num_iterations 4 \ # Number of iterations for the unfolding
+--num_events 100000 \ # Number of events for each data sample (after combining the liquid and solid samples)
+--MC_name GiBUU \ # Sample to use as simulation
+--MC2_name clasdis \ # Not used in unfolding. Just added to plots for comparison
+--data_file ./RGE_data.root \ # Path to the RGE data file
+--config ../unfolding_config.yaml \ # Path to config file
+--train_test_split \ # Enable if you want to split into train/test for unfolding
+--test_fraction 0.2 \ # If train_test_split is enabled, the fraction of data to use for testing
+--plot_directory ./ # Path to save plots to
+```
