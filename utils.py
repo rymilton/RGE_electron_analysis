@@ -14,7 +14,8 @@ def open_data(
     open_MC = False,
     MC_branches_to_open = None,
     MC_tree_name = "MC",
-    nmax = None
+    nmax = None,
+    output_format = "awkward" # Either dictionary or awkward
 ):
     event_dictionary = {"reconstructed": ak.Array([])}
     print("Using file", data_path)
@@ -34,6 +35,8 @@ def open_data(
             else:
                 event_dictionary["MC"] = file.arrays(filter_name = MC_branches_to_open)
     print(f"Took {time.time()-start_time} s to open file!")
+    if output_format == "dictionary":
+        return event_dictionary
     output_array = ak.Array(event_dictionary)
     print(f"Loaded {len(output_array)} events")
     return output_array

@@ -1,0 +1,11 @@
+GIBUU_SOLID_FILE: /home/rmilton/work_dir/rge_datasets/job_9481_LD2Csolid_gibuu_carbon_3k/candidate_electrons_LD2Csolid_gibuu_carbon_3000files_passreco.root
+GIBUU_LIQUID_FILE: /home/rmilton/work_dir/rge_datasets/job_9482_LD2Cliquid_gibuu_deuteron_3k/candidate_electrons_LD2Cliquid_gibuu_deuteron_3000files_passreco.root
+CLASDIS_SOLID_FILE: /home/rmilton/work_dir/rge_datasets/job_9586_LD2Csolid_clasdis_deuteron_zh0_3k/candidate_electrons_L2DCsolid_clasdis_deuteron_zh0_3000files_passreco.root
+CLASDIS_LIQUID_FILE: /home/rmilton/work_dir/rge_datasets/job_9663_LD2Cliquid_clasdis_deuteron_zh0_3k/candidate_electrons_L2DCliquid_clasdis_deuteron_zh0_3000files_passreco.root
+RGE_DATA_FILE: /home/rmilton/work_dir/rge_datasets/pass09/candidate_electrons_020131-020176_pass09.root
+UNFOLDING_VARIABLES:
+  - p
+  - Q2
+  - x
+  - phi_degrees
+  - theta_degrees
