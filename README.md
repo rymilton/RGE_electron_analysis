@@ -120,4 +120,4 @@ To compare to theoretical cross section predictions, we use Yadism. To install y
 
 <img width="664" height="131" alt="image" src="https://github.com/user-attachments/assets/190b0257-e018-499b-a37e-162e9e62b1be" />
 
-We then compare the theory cross sections and RGE cross sections in .
+We then compare the theory cross sections and RGE cross sections in `./analysis/notebooks/RGE_yadism_plots.ipynb`.
