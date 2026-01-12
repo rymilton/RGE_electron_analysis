@@ -15,13 +15,21 @@ def open_data(
     MC_branches_to_open = None,
     MC_tree_name = "MC",
     nmax = None,
-    output_format = "awkward" # Either dictionary or awkward
+    output_format = "awkward", # Either dictionary or awkward
+    log_file = None,
 ):
     event_dictionary = {"reconstructed": ak.Array([])}
     print("Using file", data_path)
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"Using file {data_path}\n")
+
     start_time = time.time()
     with uproot.open(data_path + f":{data_tree_name}") as file:
         print("Opening reconstructed data")
+        if log_file is not None:
+            with open(log_file, "a") as f:
+                f.write("Opening reconstructed data\n")
         if nmax is not None:
             event_dictionary["reconstructed"] = file.arrays(filter_name = branches_to_open, entry_stop=nmax)
         else:
@@ -30,15 +38,24 @@ def open_data(
         event_dictionary["MC"] = ak.Array([])
         with uproot.open(data_path + f":{MC_tree_name}") as file:
             print("Opening MC data")
+            if log_file is not None:
+                with open(log_file, "a") as f:
+                    f.write("Opening MC data\n")
             if nmax is not None:
                 event_dictionary["MC"] = file.arrays(filter_name = MC_branches_to_open, entry_stop=nmax)
             else:
                 event_dictionary["MC"] = file.arrays(filter_name = MC_branches_to_open)
     print(f"Took {time.time()-start_time} s to open file!")
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"Took {time.time()-start_time} s to open file!\n")
     if output_format == "dictionary":
         return event_dictionary
     output_array = ak.Array(event_dictionary)
     print(f"Loaded {len(output_array)} events")
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"Loaded {len(output_array)} events\n")
     return output_array
 def save_output(
     events,

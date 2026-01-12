@@ -20,7 +20,7 @@ array_operator_dict = {
 num_sectors = 6
 
 # Applying kinematic cuts to each electron based on ELECTRON_KINEMATIC_CUTS in the config file
-def apply_kinematic_cuts(events, kinematic_cuts):
+def apply_kinematic_cuts(events, kinematic_cuts, log_file = None):
     mask = np.ones(len(events), dtype=bool)
     for cut in kinematic_cuts:
         variable_name, operation, cut_value = cut.split()
@@ -30,10 +30,13 @@ def apply_kinematic_cuts(events, kinematic_cuts):
         mask = (mask) & (array_operator_dict[operation](events["reconstructed"][variable_name], float(cut_value)))
     events["pass_reco"] = mask
     print(f"Have {ak.sum(events['pass_reco'])} events after kinematic cuts")
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"Have {ak.sum(events['pass_reco'])} events after kinematic cuts\n")
     return events
 
 # Applying fiducial cuts to each electron based on ELECTRON_FIDUCIAL_CUTS in the config file
-def apply_fiducial_cuts(events, fiducial_cuts, save_plots = True, plots_directory = None, plot_title = None):
+def apply_fiducial_cuts(events, fiducial_cuts, save_plots = True, plots_directory = None, plot_title = None, log_file = None):
     
 
     PCAL_V_cut, PCAL_W_cut = None, None
@@ -299,9 +302,12 @@ def apply_fiducial_cuts(events, fiducial_cuts, save_plots = True, plots_director
     fiducial_cuts = (PCAL_fiducial_mask) & (DC_fiducial_mask)
     events["pass_reco"] = fiducial_cuts
     print(f"Have {ak.sum(events['pass_reco'])} events after fiducial cuts")
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"Have {ak.sum(events['pass_reco'])} events after fiducial cuts\n")
     return events
 
-def apply_partial_sampling_fraction_cut(events, is_simulation = False, save_plots = True, plots_directory = None, plot_title = None):
+def apply_partial_sampling_fraction_cut(events, is_simulation = False, save_plots = True, plots_directory = None, plot_title = None, log_file = None):
 
     def ecin_epcal_cut(ecin, is_simulation):
         if is_simulation:
@@ -373,6 +379,9 @@ def apply_partial_sampling_fraction_cut(events, is_simulation = False, save_plot
         plt.close()
     
     print(f"Have {ak.sum(events['pass_reco'])} events after partial SF cuts")
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"Have {ak.sum(events['pass_reco'])} events after partial SF cuts\n")
     return events
 
 def gaus(x, a, mu, sigma):
@@ -437,7 +446,7 @@ def sf_gaussians_by_sector(sampling_fractions_in_sector,
     sf_fit_data_df = pd.DataFrame(sf_fit_data)
     return sf_fit_data_df
 
-def apply_sampling_fraction_cut(events, save_plots = True, plots_directory = None, plot_title = None):
+def apply_sampling_fraction_cut(events, save_plots = True, plots_directory = None, plot_title = None, log_file = None):
 
     low_edep_bin = .6
     high_edep_bin = 1.6
@@ -587,9 +596,12 @@ def apply_sampling_fraction_cut(events, save_plots = True, plots_directory = Non
 
     events["pass_reco"] = new_pass_reco_mask
     print(f"Have {ak.sum(events['pass_reco'])} events after SF cuts")
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"Have {ak.sum(events['pass_reco'])} events after SF cuts\n")
     return events
 
-def apply_target_selection(events, solid_target_name, save_plots = True, plots_directory = None, plot_title = None):
+def apply_target_selection(events, solid_target_name, save_plots = True, plots_directory = None, plot_title = None, log_file = None):
 
     def double_gaussian(x, amp1, mean1, sigma1, amp2, mean2, sigma2):
         return amp1 * np.exp( -(x - mean1)**2 / (2*sigma1) ) + \
@@ -737,5 +749,8 @@ def apply_target_selection(events, solid_target_name, save_plots = True, plots_d
     )
 
     print(f"Have {ak.sum(events['pass_reco'])} events after target selection cuts")
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"Have {ak.sum(events['pass_reco'])} events after target selection cuts\n")
 
     return events

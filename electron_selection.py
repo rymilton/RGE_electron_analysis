@@ -85,6 +85,12 @@ def parse_arguments():
         help="Name of solid target",
         type=str,
     )
+    parser.add_argument(
+        "--log_file",
+        default=None,
+        help="Name of the log .txt file to save",
+        type=str,
+    )
 
     flags = parser.parse_args()
 
@@ -94,6 +100,8 @@ def parse_arguments():
 def main():
     flags = parse_arguments()
     
+    if flags.log_file is not None:
+        open(flags.log_file, "w").close()  # Clear log file at start
     # Open data
     parameters = LoadYaml(flags.config, flags.config_directory)
     events_array = open_data(
@@ -104,6 +112,7 @@ def main():
         MC_branches_to_open = parameters["MC_BRANCHES_TO_SAVE"] if flags.save_MC else None,
         MC_tree_name = "MC_electrons",
         nmax = flags.nmax,
+        log_file = flags.log_file,
     )
     # Apply DIS cuts and other basic cuts
     events_array = apply_kinematic_cuts(events_array, parameters["ELECTRON_KINEMATIC_CUTS"])
@@ -122,6 +131,7 @@ def main():
         save_plots = flags.save_plots,
         plots_directory = flags.plots_directory,
         plot_title = plot_title,
+        log_file = flags.log_file,
     )
     
     # Apply partial sampling fraction cuts
@@ -131,6 +141,7 @@ def main():
         save_plots = flags.save_plots,
         plots_directory = flags.plots_directory,
         plot_title = plot_title,
+        log_file = flags.log_file,
     )
     # Apply SF cuts
     events_array = apply_sampling_fraction_cut(
@@ -138,6 +149,7 @@ def main():
         save_plots = flags.save_plots,
         plots_directory = flags.plots_directory,
         plot_title = plot_title,
+        log_file = flags.log_file,
     )
 
     if flags.target_selection:
@@ -150,6 +162,7 @@ def main():
                 save_plots = flags.save_plots,
                 plots_directory = flags.plots_directory,
                 plot_title = plot_title,
+                log_file = flags.log_file,
             )
     # Save the cut electrons. Should have the option to cut on targets or not
     save_output(
