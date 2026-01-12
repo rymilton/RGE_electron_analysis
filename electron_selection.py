@@ -74,6 +74,12 @@ def parse_arguments():
         help="Use this flag if you're using simulated data rather than actual data",
     )
     parser.add_argument(
+        "--data_name",
+        default="data_carbon",
+        help="Name of the data (data_carbon) or simulation (e.g., clasdis_solid, GiBUU_liquid, etc.)",
+        type=str,
+    )
+    parser.add_argument(
         "--target_selection",
         action="store_true",
         default=False,
@@ -119,10 +125,9 @@ def main():
     # Apply fiducial cuts
     if flags.save_plots:
         os.makedirs(flags.plots_directory, exist_ok=True)
-        if flags.simulation:
-            plot_title = "RGE LD2 + C : clasdis simulation solid"
-        else:
-            plot_title = "RGE LD2 + C: 20131-20176 pass 0.9"
+        plot_names = parameters.get("PLOT_TITLES", {})
+        if flags.data_name in plot_names:
+            plot_title = f"RGE LD2 + {flags.solid_target} : {plot_names[flags.data_name]}"
     else:
         plot_title = None
     events_array = apply_fiducial_cuts(
