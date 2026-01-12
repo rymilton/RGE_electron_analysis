@@ -592,6 +592,11 @@ def apply_sampling_fraction_cut(events, save_plots = True, plots_directory = Non
         sampling_fraction_in_sector = electrons["SF"][sector_mask]
         fit_mu = sf_fit_function(edep_in_sector, *popt_mu)
         fit_sigma = sf_fit_function(edep_in_sector, *popt_sigma)
+        if log_file is not None:
+            with open(log_file, "a") as f:
+                f.write(f"Sector {sector+1} SF cut parameters:\n")
+                f.write(f"mu fit parameters: {popt_mu}\n")
+                f.write(f"sigma fit parameters: {popt_sigma}\n")
         new_pass_reco_mask[sector_mask] = (events["pass_reco"][sector_mask]) & (sampling_fraction_in_sector < (fit_mu + 3.5*fit_sigma)) & (sampling_fraction_in_sector > (fit_mu - 3.5*fit_sigma))
 
     events["pass_reco"] = new_pass_reco_mask
@@ -734,6 +739,13 @@ def apply_target_selection(events, solid_target_name, save_plots = True, plots_d
 
         deuterium_mask[sector_mask] = (events["pass_reco"][sector_mask]) & (deuterium_mask_in_sector)
         solid_mask[sector_mask] = (events["pass_reco"][sector_mask]) & (solid_mask_in_sector)
+        if log_file is not None:
+            with open(log_file, "a") as f:
+                f.write(f"Sector {sector+1} target selection parameters:\n")
+                f.write(f"Deuterium mean (cm): {deuterium_mean_by_sector[sector]}, sigma (cm): {deuterium_sigma_by_sector[sector]}\n")
+                f.write(f"{solid_target_name} mean (cm): {solid_mean_by_sector[sector]}, sigma (cm): {solid_sigma_by_sector[sector]}\n")
+                f.write(f"Deuterium cut (cm): {deuterium_mean_by_sector[sector] - 3*deuterium_sigma_by_sector[sector]} to {deuterium_mean_by_sector[sector] + 3*deuterium_sigma_by_sector[sector]}\n")
+                f.write(f"{solid_target_name} cut (cm): {solid_mean_by_sector[sector] - 5*solid_sigma_by_sector[sector]} to {solid_mean_by_sector[sector] + 5*solid_sigma_by_sector[sector]}\n")
 
 
     events["pass_reco"] = (deuterium_mask) | (solid_mask)

@@ -63,26 +63,42 @@ def save_output(
     output_file,
     branches_to_save,
     save_MC = False,
-    MC_branches_to_save = None
+    MC_branches_to_save = None,
+    log_file = None,
 ):
     reconstructed_dictionary = {}
     print("Saving reconstructed electrons")
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write("Saving reconstructed electrons\n")
     reconstructed_fields = events["reconstructed"].fields
     for field in branches_to_save:
         if field not in reconstructed_fields:
             print(f"{field} not in reconstructed particles. Skipping")
+            if log_file is not None:
+                with open(log_file, "a") as f:
+                    f.write(f"{field} not in reconstructed particles. Skipping\n")
             continue
         reconstructed_dictionary[field] = events["reconstructed"][field]
     if "pass_reco" in events.fields:
         print("saving pass reco")
+        if log_file is not None:
+            with open(log_file, "a") as f:
+                f.write("saving pass reco\n")
         reconstructed_dictionary["pass_reco"] = events["pass_reco"]
     if save_MC:
         print("Saving MC electrons")
+        if log_file is not None:
+            with open(log_file, "a") as f:
+                f.write("Saving MC electrons\n")
         MC_dictionary = {}
         MC_fields = events["MC"].fields
         for field in MC_branches_to_save:
             if field not in MC_fields:
                 print(f"{field} not in MC particles. Skipping")
+                if log_file is not None:
+                    with open(log_file, "a") as f:
+                        f.write(f"{field} not in MC particles. Skipping\n")
                 continue
             MC_dictionary[field] = events["MC"][field]
         
