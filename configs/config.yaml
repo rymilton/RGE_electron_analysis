@@ -152,7 +152,11 @@ ELECTRON_FIDUCIAL_CUTS:
 
 # By default, all plots will have "RGE LD2 + solid target"
 PLOT_TITLES:
-  data_carbon: "20131-20176 pass 0.9"
+  data_C: "20131-20176 pass 0.10"
+  data_Cu: "20185-20228 pass 0.10"
+  data_Sn: "20333-20434 pass 0.10"
+  data_Al: "20437-20489 pass 0.10"
+  data_Pb: "20060-20129 pass 0.10"
   GiBUU_solid: "GiBUU solid"
   GiBUU_liquid: "GiBUU liquid"
   clasdis_solid: "clasdis solid"

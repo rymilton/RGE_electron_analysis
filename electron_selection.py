@@ -75,8 +75,8 @@ def parse_arguments():
     )
     parser.add_argument(
         "--data_name",
-        default="data_carbon",
-        help="Name of the data (data_carbon) or simulation (e.g., clasdis_solid, GiBUU_liquid, etc.)",
+        default="data_C",
+        help="Name of the data (data_C) or simulation (e.g., clasdis_solid, GiBUU_liquid, etc.)",
         type=str,
     )
     parser.add_argument(
@@ -120,8 +120,9 @@ def main():
         nmax = flags.nmax,
         log_file = flags.log_file,
     )
+    num_EB_electrons = len(events_array)
     # Apply DIS cuts and other basic cuts
-    events_array = apply_kinematic_cuts(events_array, parameters["ELECTRON_KINEMATIC_CUTS"])
+    events_array = apply_kinematic_cuts(events_array, parameters["ELECTRON_KINEMATIC_CUTS"], log_file = flags.log_file, number_of_initial_electrons = num_EB_electrons)
     # Apply fiducial cuts
     if flags.save_plots:
         os.makedirs(flags.plots_directory, exist_ok=True)
@@ -137,6 +138,8 @@ def main():
         plots_directory = flags.plots_directory,
         plot_title = plot_title,
         log_file = flags.log_file,
+        number_of_initial_electrons = num_EB_electrons
+        
     )
     
     # Apply partial sampling fraction cuts
@@ -147,6 +150,7 @@ def main():
         plots_directory = flags.plots_directory,
         plot_title = plot_title,
         log_file = flags.log_file,
+        number_of_initial_electrons = num_EB_electrons
     )
     # Apply SF cuts
     events_array = apply_sampling_fraction_cut(
@@ -155,6 +159,7 @@ def main():
         plots_directory = flags.plots_directory,
         plot_title = plot_title,
         log_file = flags.log_file,
+        number_of_initial_electrons = num_EB_electrons
     )
 
     if flags.target_selection:
@@ -168,6 +173,7 @@ def main():
                 plots_directory = flags.plots_directory,
                 plot_title = plot_title,
                 log_file = flags.log_file,
+                number_of_initial_electrons = num_EB_electrons
             )
     # Save the cut electrons. Should have the option to cut on targets or not
     save_output(

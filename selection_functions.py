@@ -20,7 +20,7 @@ array_operator_dict = {
 num_sectors = 6
 
 # Applying kinematic cuts to each electron based on ELECTRON_KINEMATIC_CUTS in the config file
-def apply_kinematic_cuts(events, kinematic_cuts, log_file = None):
+def apply_kinematic_cuts(events, kinematic_cuts, log_file = None, number_of_initial_electrons = None):
     mask = np.ones(len(events), dtype=bool)
     for cut in kinematic_cuts:
         variable_name, operation, cut_value = cut.split()
@@ -33,16 +33,19 @@ def apply_kinematic_cuts(events, kinematic_cuts, log_file = None):
     if log_file is not None:
         with open(log_file, "a") as f:
             f.write(f"Have {ak.sum(events['pass_reco'])} events after kinematic cuts\n")
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"Have {ak.sum(events['pass_reco'])/number_of_initial_electrons} fraction of events passing kinematic cuts\n")
     return events
 
 # Applying fiducial cuts to each electron based on ELECTRON_FIDUCIAL_CUTS in the config file
-def apply_fiducial_cuts(events, fiducial_cuts, save_plots = True, plots_directory = None, plot_title = None, log_file = None):
+def apply_fiducial_cuts(events, fiducial_cuts, save_plots = True, plots_directory = None, plot_title = None, log_file = None, number_of_initial_electrons = None):
     
 
     PCAL_V_cut, PCAL_W_cut = None, None
-    PCAL_fiducial_mask = events["pass_reco"]
+    PCAL_fiducial_mask = np.ones(len(events), dtype=bool)
     DC_region1_cut, DC_region2_cut, DC_region3_cut = None, None, None
-    DC_fiducial_mask = events["pass_reco"]
+    DC_fiducial_mask = np.ones(len(events), dtype=bool)
     for cut in fiducial_cuts:
         variable_name, operation, cut_value = cut.split()
         if variable_name == "PCAL_V":
@@ -52,13 +55,16 @@ def apply_fiducial_cuts(events, fiducial_cuts, save_plots = True, plots_director
             PCAL_fiducial_mask = (PCAL_fiducial_mask) & (array_operator_dict[operation](events["reconstructed"][variable_name], float(cut_value)))
             PCAL_W_cut = float(cut_value)
         elif variable_name == "DC_region1_edge":
-            DC_fiducial_mask = (DC_fiducial_mask) & (array_operator_dict[operation](events["reconstructed"][variable_name], float(cut_value)))
+            DC_region1_mask = (array_operator_dict[operation](events["reconstructed"][variable_name], float(cut_value)))
+            DC_fiducial_mask = (DC_fiducial_mask) & (DC_region1_mask)
             DC_region1_cut = float(cut_value)
         elif variable_name == "DC_region2_edge":
-            DC_fiducial_mask = (DC_fiducial_mask) & (array_operator_dict[operation](events["reconstructed"][variable_name], float(cut_value)))
+            DC_region2_mask = (array_operator_dict[operation](events["reconstructed"][variable_name], float(cut_value)))
+            DC_fiducial_mask = (DC_fiducial_mask) & (DC_region2_mask)
             DC_region2_cut = float(cut_value)
         elif variable_name == "DC_region3_edge":
-            DC_fiducial_mask = (DC_fiducial_mask) & (array_operator_dict[operation](events["reconstructed"][variable_name], float(cut_value)))
+            DC_region3_mask = (array_operator_dict[operation](events["reconstructed"][variable_name], float(cut_value)))
+            DC_fiducial_mask = (DC_fiducial_mask) & (DC_region3_mask)
             DC_region3_cut = float(cut_value)
     if save_plots:
 
@@ -300,14 +306,29 @@ def apply_fiducial_cuts(events, fiducial_cuts, save_plots = True, plots_director
         plt.close()
     
     fiducial_cuts = (PCAL_fiducial_mask) & (DC_fiducial_mask)
-    events["pass_reco"] = fiducial_cuts
+
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"Have {ak.sum(PCAL_fiducial_mask)/number_of_initial_electrons} fraction of events after PCAL fiducial cuts\n")
+            f.write(f"Have {ak.sum(DC_fiducial_mask)/number_of_initial_electrons} fraction of events after DC fiducial cuts\n")
+            f.write(f"Have {ak.sum(fiducial_cuts)/number_of_initial_electrons} fraction of events after PCAL and DC fiducial cuts\n")
+            f.write(f"Have {ak.sum(DC_region1_mask)/number_of_initial_electrons} fraction of events after DC region 1 fiducial cut\n")
+            f.write(f"Have {ak.sum(DC_region2_mask)/number_of_initial_electrons} fraction of events after DC region 2 fiducial cut\n")
+            f.write(f"Have {ak.sum(DC_region3_mask)/number_of_initial_electrons} fraction of events after DC region 3 fiducial cut\n")
+
+    events["pass_reco"] = (fiducial_cuts) & (events["pass_reco"])
+
     print(f"Have {ak.sum(events['pass_reco'])} events after fiducial cuts")
     if log_file is not None:
         with open(log_file, "a") as f:
-            f.write(f"Have {ak.sum(events['pass_reco'])} events after fiducial cuts\n")
+            f.write(f"Have {ak.sum(events['pass_reco'])} pass reco events after fiducial cuts\n")
+        with open(log_file, "a") as f:
+            f.write(f"Have {ak.sum(events['pass_reco'])} fraction of events after PCAL and DC fiducial cuts and kinematic cuts\n")
+    
+    events["pass_fiducial_and_kinematic"] = events["pass_reco"]
     return events
 
-def apply_partial_sampling_fraction_cut(events, is_simulation = False, save_plots = True, plots_directory = None, plot_title = None, log_file = None):
+def apply_partial_sampling_fraction_cut(events, is_simulation = False, save_plots = True, plots_directory = None, plot_title = None, log_file = None, number_of_initial_electrons = None):
 
     def ecin_epcal_cut(ecin, is_simulation):
         if is_simulation:
@@ -319,11 +340,11 @@ def apply_partial_sampling_fraction_cut(events, is_simulation = False, save_plot
     partial_SF_mask[events["reconstructed"]["p"] < 4.5] = True
 
     if save_plots:
-        events_without_partialsampling_cut = events[events["pass_reco"]]
+        events_without_partialsampling_cut = events[events["pass_fiducial_and_kinematic"]]
     # Updating the pass_reco mask to include the partial sampling fraction cut
     events["pass_reco"] = (events["pass_reco"]) & (partial_SF_mask)
     if save_plots:
-        events_with_partialsampling_cut = events[events["pass_reco"]]
+        events_with_partialsampling_cut = events[(events["pass_fiducial_and_kinematic"]) & (partial_SF_mask)]
 
     if save_plots:
         fig, axs = plt.subplots(3, 2, figsize=(18, 18))
@@ -381,7 +402,10 @@ def apply_partial_sampling_fraction_cut(events, is_simulation = False, save_plot
     print(f"Have {ak.sum(events['pass_reco'])} events after partial SF cuts")
     if log_file is not None:
         with open(log_file, "a") as f:
-            f.write(f"Have {ak.sum(events['pass_reco'])} events after partial SF cuts\n")
+            f.write(f"Have {ak.sum(events['pass_reco'])} pass reco events after partial SF cuts\n")
+            f.write(f"Have {ak.sum(partial_SF_mask)/number_of_initial_electrons} fraction of events after partial SF cuts\n")
+            f.write(f"Have {ak.sum((events['pass_fiducial_and_kinematic']) & (partial_SF_mask))/number_of_initial_electrons} fraction of events after fiducial,kinematic, and partial SF cuts\n")
+    events["pass_partial_SF"] = partial_SF_mask
     return events
 
 def gaus(x, a, mu, sigma):
@@ -446,7 +470,7 @@ def sf_gaussians_by_sector(sampling_fractions_in_sector,
     sf_fit_data_df = pd.DataFrame(sf_fit_data)
     return sf_fit_data_df
 
-def apply_sampling_fraction_cut(events, save_plots = True, plots_directory = None, plot_title = None, log_file = None):
+def apply_sampling_fraction_cut(events, save_plots = True, plots_directory = None, plot_title = None, log_file = None, number_of_initial_electrons = None):
 
     low_edep_bin = .6
     high_edep_bin = 1.6
@@ -466,7 +490,7 @@ def apply_sampling_fraction_cut(events, save_plots = True, plots_directory = Non
     edep_by_sector = []
     edep_bins_by_sector = []
     for sector in range(num_sectors):
-        sector_cut = (electrons["sector"]==(sector+1)) & (events["pass_reco"])
+        sector_cut = (electrons["sector"]==(sector+1)) & (events["pass_fiducial_and_kinematic"])
         total_ecal_energy = np.array(electrons["total_ecal_energy"][sector_cut])
         sampling_fraction = np.array(electrons["SF"][sector_cut])
         sampling_fraction_by_sector.append(sampling_fraction)
@@ -583,6 +607,7 @@ def apply_sampling_fraction_cut(events, save_plots = True, plots_directory = Non
         plt.close()
 
     new_pass_reco_mask = np.ones(len(events["pass_reco"]), dtype=bool)
+    SF_mask = np.ones(len(events["pass_reco"]), dtype=bool)
     for sector in range(num_sectors):
         sector_mask = (electrons["sector"]==(sector+1))
 
@@ -597,16 +622,21 @@ def apply_sampling_fraction_cut(events, save_plots = True, plots_directory = Non
                 f.write(f"Sector {sector+1} SF cut parameters:\n")
                 f.write(f"mu fit parameters: {popt_mu}\n")
                 f.write(f"sigma fit parameters: {popt_sigma}\n")
+        SF_mask[sector_mask] = (sampling_fraction_in_sector < (fit_mu + 3.5*fit_sigma)) & (sampling_fraction_in_sector > (fit_mu - 3.5*fit_sigma))
         new_pass_reco_mask[sector_mask] = (events["pass_reco"][sector_mask]) & (sampling_fraction_in_sector < (fit_mu + 3.5*fit_sigma)) & (sampling_fraction_in_sector > (fit_mu - 3.5*fit_sigma))
 
     events["pass_reco"] = new_pass_reco_mask
     print(f"Have {ak.sum(events['pass_reco'])} events after SF cuts")
     if log_file is not None:
         with open(log_file, "a") as f:
-            f.write(f"Have {ak.sum(events['pass_reco'])} events after SF cuts\n")
+            f.write(f"Have {ak.sum(events['pass_reco'])} pass reco events after SF cuts\n")
+            f.write(f"Have {ak.sum(SF_mask)/number_of_initial_electrons} fraction of events after SF cuts\n")
+            f.write(f"Have {ak.sum((events['pass_fiducial_and_kinematic']) & (SF_mask))/number_of_initial_electrons} fraction of events after fiducial,kinematic, and SF cuts\n")
+            f.write(f"Have {ak.sum((events['pass_partial_SF']) & (SF_mask))/number_of_initial_electrons} fraction of events after partial and SF cuts\n")
+            f.write(f"Have {ak.sum((events['pass_fiducial_and_kinematic']) & (events['pass_partial_SF']) & (SF_mask))/ak.sum((events['pass_fiducial_and_kinematic']))} fraction of events that pass fiducial and kinematic cuts after partial and SF cuts\n")
     return events
 
-def apply_target_selection(events, solid_target_name, save_plots = True, plots_directory = None, plot_title = None, log_file = None):
+def apply_target_selection(events, solid_target_name, save_plots = True, plots_directory = None, plot_title = None, log_file = None, number_of_initial_electrons = None):
 
     def double_gaussian(x, amp1, mean1, sigma1, amp2, mean2, sigma2):
         return amp1 * np.exp( -(x - mean1)**2 / (2*sigma1) ) + \
@@ -747,7 +777,9 @@ def apply_target_selection(events, solid_target_name, save_plots = True, plots_d
                 f.write(f"Deuterium cut (cm): {deuterium_mean_by_sector[sector] - 3*deuterium_sigma_by_sector[sector]} to {deuterium_mean_by_sector[sector] + 3*deuterium_sigma_by_sector[sector]}\n")
                 f.write(f"{solid_target_name} cut (cm): {solid_mean_by_sector[sector] - 5*solid_sigma_by_sector[sector]} to {solid_mean_by_sector[sector] + 5*solid_sigma_by_sector[sector]}\n")
 
-
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"Have {ak.sum((deuterium_mask) | (solid_mask))/ak.sum(events['pass_reco'])} fraction of events after target selection cuts\n")
     events["pass_reco"] = (deuterium_mask) | (solid_mask)
     target = np.empty(len(events), dtype=object)
     target[deuterium_mask] = "LD2"
