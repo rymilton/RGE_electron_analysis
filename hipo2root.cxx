@@ -56,11 +56,11 @@ struct rec_track_holder {
 
 struct rec_calorimeter_holder {
     std::vector<short> pindex;
-    std::vector<int> layer, sector;
+    std::vector<int> layer, sector, detector;
     std::vector<float> energy, time, lu, lv, lw, du, dv, dw;
 
     void clear() {
-        pindex.clear(); layer.clear(); sector.clear();
+        pindex.clear(); layer.clear(); sector.clear(); detector.clear();
         energy.clear(); time.clear(); lu.clear(); lv.clear(); lw.clear();
         du.clear(); dv.clear(); dw.clear();
     }
@@ -200,6 +200,7 @@ int main(int argc, char** argv) {
 
     // REC::Calorimeter branches
     tree.Branch("REC::Calorimeter::pindex", &recCalorimeter.pindex);
+    tree.Branch("REC::Calorimeter::detector", &recCalorimeter.detector);
     tree.Branch("REC::Calorimeter::layer", &recCalorimeter.layer);
     tree.Branch("REC::Calorimeter::sector", &recCalorimeter.sector);
     tree.Branch("REC::Calorimeter::energy", &recCalorimeter.energy);
@@ -266,6 +267,18 @@ int main(int argc, char** argv) {
 
         event.getStructure(rec_particles_bank);
         int nrows = rec_particles_bank.getRows();
+        recParticles.pid.reserve(nrows);
+        recParticles.px.reserve(nrows);
+        recParticles.py.reserve(nrows);
+        recParticles.pz.reserve(nrows);
+        recParticles.vx.reserve(nrows);
+        recParticles.vy.reserve(nrows);
+        recParticles.vz.reserve(nrows);
+        recParticles.vt.reserve(nrows);
+        recParticles.charge.reserve(nrows);
+        recParticles.beta.reserve(nrows);
+        recParticles.chi2pid.reserve(nrows);
+        recParticles.status.reserve(nrows);
         for (int row = 0; row < nrows; row++) {
             recParticles.pid.push_back(rec_particles_bank.getInt("pid", row));
             recParticles.px.push_back(rec_particles_bank.getFloat("px", row));
@@ -283,6 +296,18 @@ int main(int argc, char** argv) {
 
         event.getStructure(rec_traj_bank);
         nrows = rec_traj_bank.getRows();
+        recTraj.pindex.reserve(nrows);
+        recTraj.index.reserve(nrows);
+        recTraj.detector.reserve(nrows);
+        recTraj.layer.reserve(nrows);
+        recTraj.x.reserve(nrows);
+        recTraj.y.reserve(nrows);
+        recTraj.z.reserve(nrows);
+        recTraj.cx.reserve(nrows);
+        recTraj.cy.reserve(nrows);
+        recTraj.cz.reserve(nrows);
+        recTraj.path.reserve(nrows);
+        recTraj.edge.reserve(nrows);
         for (int row = 0; row < nrows; row++) {
             recTraj.pindex.push_back(rec_traj_bank.getShort("pindex", row));
             recTraj.index.push_back(rec_traj_bank.getShort("index", row));
@@ -300,6 +325,12 @@ int main(int argc, char** argv) {
         
         event.getStructure(rec_track_bank);
         nrows = rec_track_bank.getRows();
+        recTrack.index.reserve(nrows);
+        recTrack.pindex.reserve(nrows);
+        recTrack.NDF.reserve(nrows);
+        recTrack.q.reserve(nrows);
+        recTrack.sector.reserve(nrows);
+        recTrack.chi2.reserve(nrows);
         for (int row = 0; row < nrows; row++) {
             recTrack.index.push_back(rec_track_bank.getShort("index", row));
             recTrack.pindex.push_back(rec_track_bank.getShort("pindex", row));
@@ -311,8 +342,21 @@ int main(int argc, char** argv) {
 
         event.getStructure(rec_calorimeter_bank);
         nrows = rec_calorimeter_bank.getRows();
+        recCalorimeter.pindex.reserve(nrows);
+        recCalorimeter.detector.reserve(nrows);
+        recCalorimeter.layer.reserve(nrows);
+        recCalorimeter.sector.reserve(nrows);
+        recCalorimeter.energy.reserve(nrows);
+        recCalorimeter.time.reserve(nrows);
+        recCalorimeter.lu.reserve(nrows);
+        recCalorimeter.lv.reserve(nrows);
+        recCalorimeter.lw.reserve(nrows);
+        recCalorimeter.du.reserve(nrows);
+        recCalorimeter.dv.reserve(nrows);
+        recCalorimeter.dw.reserve(nrows);
         for (int row = 0; row < nrows; row++) {
             recCalorimeter.pindex.push_back(rec_calorimeter_bank.getShort("pindex", row));
+            recCalorimeter.detector.push_back(rec_calorimeter_bank.getByte("detector", row));
             recCalorimeter.layer.push_back(rec_calorimeter_bank.getByte("layer", row));
             recCalorimeter.sector.push_back(rec_calorimeter_bank.getByte("sector", row));
             recCalorimeter.energy.push_back(rec_calorimeter_bank.getFloat("energy", row));
@@ -327,6 +371,9 @@ int main(int argc, char** argv) {
 
         event.getStructure(rec_cherenkov_bank);
         nrows = rec_cherenkov_bank.getRows();
+        recCherenkov.pindex.reserve(nrows);
+        recCherenkov.detector.reserve(nrows);
+        recCherenkov.nphe.reserve(nrows);
         for (int row = 0; row < nrows; row++) {
             recCherenkov.pindex.push_back(rec_cherenkov_bank.getShort("pindex", row));
             recCherenkov.detector.push_back(rec_cherenkov_bank.getByte("detector", row));
@@ -335,12 +382,15 @@ int main(int argc, char** argv) {
 
         event.getStructure(run_scaler_bank);
         nrows = run_scaler_bank.getRows();
+        runScalers.fcupgated.reserve(nrows);
         for (int row = 0; row < nrows; row++) {
             runScalers.fcupgated.push_back(run_scaler_bank.getFloat("fcupgated", row));
         }
 
         event.getStructure(run_config_bank);
         nrows = run_config_bank.getRows();
+        runConfigs.run.reserve(nrows);
+        runConfigs.event.reserve(nrows);
         for (int row = 0; row < nrows; row++) {
             runConfigs.run.push_back(run_config_bank.getInt("run", row));
             runConfigs.event.push_back(run_config_bank.getInt("event", row));
@@ -351,6 +401,14 @@ int main(int argc, char** argv) {
             mcEvents.clear();
             event.getStructure(mc_particle_bank);
             nrows = mc_particle_bank.getRows();
+            mcParticles.pid.reserve(nrows);
+            mcParticles.px.reserve(nrows);
+            mcParticles.py.reserve(nrows);
+            mcParticles.pz.reserve(nrows);
+            mcParticles.vx.reserve(nrows);
+            mcParticles.vy.reserve(nrows);
+            mcParticles.vz.reserve(nrows);
+            mcParticles.vt.reserve(nrows);
             for (int row = 0; row < nrows; row++) {
                 mcParticles.pid.push_back(mc_particle_bank.getInt("pid", row));
                 mcParticles.px.push_back(mc_particle_bank.getFloat("px", row));
@@ -364,6 +422,16 @@ int main(int argc, char** argv) {
 
             event.getStructure(mc_event_bank);
             nrows = mc_event_bank.getRows();
+            mcEvents.npart.reserve(nrows);
+            mcEvents.atarget.reserve(nrows);
+            mcEvents.ztarget.reserve(nrows);
+            mcEvents.ptarget.reserve(nrows);
+            mcEvents.pbeam.reserve(nrows);
+            mcEvents.ebeam.reserve(nrows);
+            mcEvents.weight.reserve(nrows);
+            mcEvents.btype.reserve(nrows);
+            mcEvents.targetid.reserve(nrows);
+            mcEvents.processid.reserve(nrows);
             for (int row = 0; row < nrows; row++) {
                 mcEvents.npart.push_back(mc_event_bank.getShort("npart", row));
                 mcEvents.atarget.push_back(mc_event_bank.getShort("atarget", row));
