@@ -8,6 +8,33 @@
 #include <cmath> // for std::sqrt, std::atan2
 #include <vector>
 
+
+/*
+    My whole workflow is getting tedious with all the scripts that I have to run.
+    I should add the following to this script:
+    - Only keep events with a trigger electron -- done
+    - Calculate the DIS quantities for each event and save them in an event tree -- done
+    - Save the particles in a separated tree -- done
+    - Do the same for MC -- done
+    - Switch to RNTuple
+    - Add multiprocessing if given a whole directory of files, but also allow for a single file to be processed
+*/
+
+std::tuple<double, double, double, double, double> calculate_DIS_quantities(double elec_px, double elec_py, double elec_pz)
+{
+    const double E_beam = 10.547;
+    double p = std::sqrt(elec_px*elec_px + elec_py*elec_py + elec_pz*elec_pz); // electron momentum
+    double E = std::sqrt(p*p + 0.000511*0.000511); // electron energy
+    double nu = E_beam - E; // energy transfer
+
+    double theta = std::atan2(std::sqrt(elec_px*elec_px + elec_py*elec_py), elec_pz); // electron scattering angle
+    double Q2 = 4 * E_beam * E * std::sin(theta/2) * std::sin(theta/2);
+    double x = Q2 / (2 * 0.938 * nu); // Bjorken x, using proton mass
+    double y = nu / E_beam; // inelasticity
+    double W2 = 0.938*0.938 + 2*0.938*nu - Q2; // invariant mass of the hadronic system
+
+    return std::make_tuple(Q2, nu, x, y, W2);
+}
 void tuple_maker(
     TString input_dir,
     TString input_file,
@@ -78,83 +105,94 @@ void tuple_maker(
 
     std::cout << "Will save output to " << output_dir + output_file << std::endl;
     TFile* outFile = TFile::Open(output_dir + output_file, "RECREATE");
-    TTree* outTree = new TTree("data", "Processed Data");
-    // TTree *outTree_meta = new TTree("meta", "Event level info");
-    TTree* outTree_MC = new TTree("MC", "Monte Carlo Data");
+    TTree* outTree_recopart = new TTree("reco_particles", "Reconstructed Particles");
+    TTree* outTree_recoevent = new TTree("reco_event", "Reconstructed Event info");
+    TTree *outTree_meta = new TTree("meta", "Event level info");
+    TTree* outTree_genpart = new TTree("gen_particles", "Gen-level particles");
+    TTree* outTree_genevent = new TTree("gen_event", "Gen-level Event info");
 
     // Output branches: A vector of particles for each event
+    // Kinematic and track quantities for each particle
     std::vector<double> beta, chi2pid, px, py, pz, p, vt, vx, vy, vz, theta, phi;
     std::vector<int> charge, pid, status;
     std::vector<int> track_charge, sector, track_ndf;
     std::vector<double> track_chi2;
-
+    
+    // Detector info for each particle
     std::vector<double> E_PCAL, E_ECIN, E_ECOUT;
     std::vector<double> PCAL_U, PCAL_V, PCAL_W;
     std::vector<double> PCAL_x, PCAL_y, PCAL_z, PCAL_edge;
-
-
     std::vector<int> Nphe_HTCC, Nphe_LTCC;
-
     std::vector<double> DC_region1_x, DC_region1_y, DC_region1_z, DC_region1_edge;
     std::vector<double> DC_region2_x, DC_region2_y, DC_region2_z, DC_region2_edge;
     std::vector<double> DC_region3_x, DC_region3_y, DC_region3_z, DC_region3_edge;
 
+    // Event-level DIS quantities
+    double Q2, nu, x, y, W;
+
     double fcupgated;
     int run_number, event_number, num_tracks;
 
-    std::vector<int> MC_pid;
-    std::vector<double> MC_px, MC_py, MC_pz, MC_vx, MC_vy, MC_vz, MC_vt;
+    std::vector<int> gen_pid;
+    std::vector<double> gen_px, gen_py, gen_pz, gen_vx, gen_vy, gen_vz, gen_vt;
+    double gen_Q2, gen_nu, gen_x, gen_y, gen_W;
 
-    outTree->Branch("beta", &beta);
-    outTree->Branch("charge", &charge);
-    outTree->Branch("chi2pid", &chi2pid);
-    outTree->Branch("pid", &pid);
-    outTree->Branch("p_x", &px);
-    outTree->Branch("p_y", &py);
-    outTree->Branch("p_z", &pz);
-    outTree->Branch("p", &p);
-    outTree->Branch("status", &status);
-    outTree->Branch("v_t", &vt);
-    outTree->Branch("v_x", &vx);
-    outTree->Branch("v_y", &vy);
-    outTree->Branch("v_z", &vz);
-    outTree->Branch("theta", &theta);
-    outTree->Branch("phi", &phi);
+    outTree_recopart->Branch("beta", &beta);
+    outTree_recopart->Branch("charge", &charge);
+    outTree_recopart->Branch("chi2pid", &chi2pid);
+    outTree_recopart->Branch("pid", &pid);
+    outTree_recopart->Branch("p_x", &px);
+    outTree_recopart->Branch("p_y", &py);
+    outTree_recopart->Branch("p_z", &pz);
+    outTree_recopart->Branch("p", &p);
+    outTree_recopart->Branch("status", &status);
+    outTree_recopart->Branch("v_t", &vt);
+    outTree_recopart->Branch("v_x", &vx);
+    outTree_recopart->Branch("v_y", &vy);
+    outTree_recopart->Branch("v_z", &vz);
+    outTree_recopart->Branch("theta", &theta);
+    outTree_recopart->Branch("phi", &phi);
 
-    outTree->Branch("track_charge", &track_charge);
-    outTree->Branch("sector", &sector);
-    outTree->Branch("NDF", &track_ndf);
-    outTree->Branch("chi2", &track_chi2);
+    outTree_recopart->Branch("track_charge", &track_charge);
+    outTree_recopart->Branch("sector", &sector);
+    outTree_recopart->Branch("NDF", &track_ndf);
+    outTree_recopart->Branch("chi2", &track_chi2);
 
-    outTree->Branch("E_PCAL", &E_PCAL);
-    outTree->Branch("E_ECIN", &E_ECIN);
-    outTree->Branch("E_ECOUT", &E_ECOUT);
-    outTree->Branch("PCAL_U", &PCAL_U);
-    outTree->Branch("PCAL_V", &PCAL_V);
-    outTree->Branch("PCAL_W", &PCAL_W);
+    outTree_recopart->Branch("E_PCAL", &E_PCAL);
+    outTree_recopart->Branch("E_ECIN", &E_ECIN);
+    outTree_recopart->Branch("E_ECOUT", &E_ECOUT);
+    outTree_recopart->Branch("PCAL_U", &PCAL_U);
+    outTree_recopart->Branch("PCAL_V", &PCAL_V);
+    outTree_recopart->Branch("PCAL_W", &PCAL_W);
 
-    outTree->Branch("Nphe_HTCC", &Nphe_HTCC);
-    outTree->Branch("Nphe_LTCC", &Nphe_LTCC);
+    outTree_recopart->Branch("Nphe_HTCC", &Nphe_HTCC);
+    outTree_recopart->Branch("Nphe_LTCC", &Nphe_LTCC);
 
-    outTree->Branch("DC_region1_x", &DC_region1_x);
-    outTree->Branch("DC_region1_y", &DC_region1_y);
-    outTree->Branch("DC_region1_z", &DC_region1_z);
-    outTree->Branch("DC_region1_edge", &DC_region1_edge);
+    outTree_recopart->Branch("DC_region1_x", &DC_region1_x);
+    outTree_recopart->Branch("DC_region1_y", &DC_region1_y);
+    outTree_recopart->Branch("DC_region1_z", &DC_region1_z);
+    outTree_recopart->Branch("DC_region1_edge", &DC_region1_edge);
 
-    outTree->Branch("DC_region2_x", &DC_region2_x);
-    outTree->Branch("DC_region2_y", &DC_region2_y);
-    outTree->Branch("DC_region2_z", &DC_region2_z);
-    outTree->Branch("DC_region2_edge", &DC_region2_edge);
+    outTree_recopart->Branch("DC_region2_x", &DC_region2_x);
+    outTree_recopart->Branch("DC_region2_y", &DC_region2_y);
+    outTree_recopart->Branch("DC_region2_z", &DC_region2_z);
+    outTree_recopart->Branch("DC_region2_edge", &DC_region2_edge);
 
-    outTree->Branch("DC_region3_x", &DC_region3_x);
-    outTree->Branch("DC_region3_y", &DC_region3_y);
-    outTree->Branch("DC_region3_z", &DC_region3_z);
-    outTree->Branch("DC_region3_edge", &DC_region3_edge);
+    outTree_recopart->Branch("DC_region3_x", &DC_region3_x);
+    outTree_recopart->Branch("DC_region3_y", &DC_region3_y);
+    outTree_recopart->Branch("DC_region3_z", &DC_region3_z);
+    outTree_recopart->Branch("DC_region3_edge", &DC_region3_edge);
 
-    outTree->Branch("PCAL_x", &PCAL_x);
-    outTree->Branch("PCAL_y", &PCAL_y);
-    outTree->Branch("PCAL_z", &PCAL_z);
-    outTree->Branch("PCAL_edge", &PCAL_edge);
+    outTree_recopart->Branch("PCAL_x", &PCAL_x);
+    outTree_recopart->Branch("PCAL_y", &PCAL_y);
+    outTree_recopart->Branch("PCAL_z", &PCAL_z);
+    outTree_recopart->Branch("PCAL_edge", &PCAL_edge);
+
+    outTree_recoevent->Branch("Q2", &Q2);
+    outTree_recoevent->Branch("nu", &nu);
+    outTree_recoevent->Branch("x", &x);
+    outTree_recoevent->Branch("y", &y);
+    outTree_recoevent->Branch("W", &W);
 
     outTree_meta->Branch("fcupgated", &fcupgated);
     outTree_meta->Branch("run_number", &run_number);
@@ -190,6 +228,36 @@ void tuple_maker(
         outTree_meta->Fill();
 
         if (num_tracks == 0 || num_parts == 0) continue;
+
+        // First loop over the reconstructed particles to check that there's a reconstructed trigger electron in the event. 
+        // If found, calculate DIS quantities. If not, skip the event.
+        bool has_trigger_electron = false;
+        for (int i = 0; i < num_parts; i++) {
+            int pid_i = (int) particle_pid_branch[i];
+            int status_i = (int) particle_status_branch[i];
+            if (pid_i == 11 && status<0)
+            {
+                has_trigger_electron = true;
+                double px_i = particle_px_branch[i];
+                double py_i = particle_py_branch[i];
+                double pz_i = particle_pz_branch[i];
+                auto [Q2_i, nu_i, x_i, y_i, W2_i] = calculate_DIS_quantities(px_i, py_i, pz_i);
+                if (W2_i < 0)
+                {
+                    has_trigger_electron = false; // unphysical W2, likely a bad electron candidate, so skip the event
+                    break;
+                }
+
+                Q2.push_back(Q2_i);
+                nu.push_back(nu_i);
+                x.push_back(x_i);
+                y.push_back(y_i);
+                W.push_back(W_i);
+
+                break; // no need to loop over more particles once we've found the trigger electron
+            }
+        }
+        if (!has_trigger_electron) continue;
         
         // Loop over each track to fill one entry per track
         for (int i = 0; i < num_tracks; i++) {
@@ -404,56 +472,84 @@ void tuple_maker(
 
 
         } // end loop over tracks
-        outTree->Fill();
+        outTree_recopart->Fill();
+        outTree_recoevent->Fill();
     }
     // Saving the MC branches if desired
     if (save_MC)
     {
         reader.Restart();
-        TTreeReaderArray<int> MC_pid_branch(reader, "MC::Particle::pid");
-        TTreeReaderArray<float> MC_px_branch(reader, "MC::Particle::px");
-        TTreeReaderArray<float> MC_py_branch(reader, "MC::Particle::py");
-        TTreeReaderArray<float> MC_pz_branch(reader, "MC::Particle::pz");
-        TTreeReaderArray<float> MC_vx_branch(reader, "MC::Particle::vx");
-        TTreeReaderArray<float> MC_vy_branch(reader, "MC::Particle::vy");
-        TTreeReaderArray<float> MC_vz_branch(reader, "MC::Particle::vz");
-        TTreeReaderArray<float> MC_vt_branch(reader, "MC::Particle::vt");
+        TTreeReaderArray<int> gen_pid_branch(reader, "MC::Particle::pid");
+        TTreeReaderArray<float> gen_px_branch(reader, "MC::Particle::px");
+        TTreeReaderArray<float> gen_py_branch(reader, "MC::Particle::py");
+        TTreeReaderArray<float> gen_pz_branch(reader, "MC::Particle::pz");
+        TTreeReaderArray<float> gen_vx_branch(reader, "MC::Particle::vx");
+        TTreeReaderArray<float> gen_vy_branch(reader, "MC::Particle::vy");
+        TTreeReaderArray<float> gen_vz_branch(reader, "MC::Particle::vz");
+        TTreeReaderArray<float> gen_vt_branch(reader, "MC::Particle::vt");
 
-        outTree_MC->Branch("MC_pid", &MC_pid);
-        outTree_MC->Branch("MC_px", &MC_px);
-        outTree_MC->Branch("MC_py", &MC_py);
-        outTree_MC->Branch("MC_pz", &MC_pz);
-        outTree_MC->Branch("MC_vx", &MC_vx);
-        outTree_MC->Branch("MC_vy", &MC_vy);
-        outTree_MC->Branch("MC_vz", &MC_vz);
-        outTree_MC->Branch("MC_vt", &MC_vt);
+        outTree_genpart->Branch("gen_pid", &gen_pid);
+        outTree_genpart->Branch("gen_px", &gen_px);
+        outTree_genpart->Branch("gen_py", &gen_py);
+        outTree_genpart->Branch("gen_pz", &gen_pz);
+        outTree_genpart->Branch("gen_vx", &gen_vx);
+        outTree_genpart->Branch("gen_vy", &gen_vy);
+        outTree_genpart->Branch("gen_vz", &gen_vz);
+        outTree_genpart->Branch("gen_vt", &gen_vt);
+
+        outTree_genevent->Branch("gen_Q2", &gen_Q2);
+        outTree_genevent->Branch("gen_nu", &gen_nu);
+        outTree_genevent->Branch("gen_x", &gen_x);
+        outTree_genevent->Branch("gen_y", &gen_y);
+        outTree_genevent->Branch("gen_W", &gen_W);
         
         while(reader.Next())
         {   
-            MC_pid.clear(); MC_px.clear(); MC_py.clear(); MC_pz.clear();
-            MC_vx.clear(); MC_vy.clear(); MC_vz.clear(); MC_vt.clear();
-            int num_MC_parts = MC_pid_branch.GetSize();
-            for (int i = 0; i < num_MC_parts; i++)
+            gen_pid.clear(); gen_px.clear(); gen_py.clear(); gen_pz.clear();
+            gen_vx.clear(); gen_vy.clear(); gen_vz.clear(); gen_vt.clear();
+            int num_gen_parts = gen_pid_branch.GetSize();
+            bool calculated_gen_DIS = false;
+            for (int i = 0; i < num_gen_parts; i++)
             {
-                MC_pid.push_back((int) MC_pid_branch[i]);
-                MC_px.push_back(MC_px_branch[i]);
-                MC_py.push_back(MC_py_branch[i]);
-                MC_pz.push_back(MC_pz_branch[i]);
-                MC_vx.push_back(MC_vx_branch[i]);
-                MC_vy.push_back(MC_vy_branch[i]);
-                MC_vz.push_back(MC_vz_branch[i]);
-                MC_vt.push_back(MC_vt_branch[i]);
+                gen_pid_i = (int) gen_pid_branch[i];
+                // Assuming that the first electron found is the scattered electron
+                if (gen_pid_i == 11 && !calculated_gen_DIS) // if it's an electron, calculate the gen-level DIS quantities for the event
+                {
+                    double px_i = gen_px_branch[i];
+                    double py_i = gen_py_branch[i];
+                    double pz_i = gen_pz_branch[i];
+                    auto [gen_Q2_i, gen_nu_i, gen_x_i, gen_y_i, gen_W2_i] = calculate_DIS_quantities(px_i, py_i, pz_i);
+                    gen_Q2 = gen_Q2_i;
+                    gen_nu = gen_nu_i;
+                    gen_x = gen_x_i;
+                    gen_y = gen_y_i;
+                    gen_W = std::sqrt(gen_W2_i);
+                    calculated_gen_DIS = true; // only calculate DIS quantities for the first electron found in the gen particles list, which should be the trigger electron
+                }
+                gen_pid.push_back((int) gen_pid_branch[i]);
+                gen_px.push_back(gen_px_branch[i]);
+                gen_py.push_back(gen_py_branch[i]);
+                gen_pz.push_back(gen_pz_branch[i]);
+                gen_vx.push_back(gen_vx_branch[i]);
+                gen_vy.push_back(gen_vy_branch[i]);
+                gen_vz.push_back(gen_vz_branch[i]);
+                gen_vt.push_back(gen_vt_branch[i]);
             }
-            outTree_MC->Fill();
+            outTree_genpart->Fill();
+            outTree_genevent->Fill();
         }
         
     }
     std::cout << "Processed " << counter << " events" << std::endl;
 
-    outFile->cd();
-    outTree->Write();
+    outFile->cd();0
+    outTree_recopart->Write();
     outTree_meta->Write();
-    if (save_MC) outTree_MC->Write();
+    if (save_MC)
+    {
+        outTree_genpart->Write();
+        outTree_genevent->Write();
+    }
     outFile->Close();
     inFile->Close();
 }
