@@ -28,48 +28,48 @@ void tuple_maker(
     TTreeReader reader(tree);
 
     // Input branches (arrays)
-    TTreeReaderArray<double> particle_pid_branch(reader, "REC::Particle::pid");
-    TTreeReaderArray<double> particle_vx_branch(reader, "REC::Particle::vx");
-    TTreeReaderArray<double> particle_vy_branch(reader, "REC::Particle::vy");
-    TTreeReaderArray<double> particle_vz_branch(reader, "REC::Particle::vz");
-    TTreeReaderArray<double> particle_vt_branch(reader, "REC::Particle::vt");
-    TTreeReaderArray<double> particle_px_branch(reader, "REC::Particle::px");
-    TTreeReaderArray<double> particle_py_branch(reader, "REC::Particle::py");
-    TTreeReaderArray<double> particle_pz_branch(reader, "REC::Particle::pz");
-    TTreeReaderArray<double> particle_charge_branch(reader, "REC::Particle::charge");
-    TTreeReaderArray<double> particle_beta_branch(reader, "REC::Particle::beta");
-    TTreeReaderArray<double> particle_chi2pid_branch(reader, "REC::Particle::chi2pid");
-    TTreeReaderArray<double> particle_status_branch(reader, "REC::Particle::status");
+    TTreeReaderArray<int> particle_pid_branch(reader,       "REC::Particle::pid");
+    TTreeReaderArray<float> particle_vx_branch(reader,      "REC::Particle::vx");
+    TTreeReaderArray<float> particle_vy_branch(reader,      "REC::Particle::vy");
+    TTreeReaderArray<float> particle_vz_branch(reader,      "REC::Particle::vz");
+    TTreeReaderArray<float> particle_vt_branch(reader,      "REC::Particle::vt");
+    TTreeReaderArray<float> particle_px_branch(reader,      "REC::Particle::px");
+    TTreeReaderArray<float> particle_py_branch(reader,      "REC::Particle::py");
+    TTreeReaderArray<float> particle_pz_branch(reader,      "REC::Particle::pz");
+    TTreeReaderArray<int> particle_charge_branch(reader,    "REC::Particle::charge");
+    TTreeReaderArray<float> particle_beta_branch(reader,    "REC::Particle::beta");
+    TTreeReaderArray<float> particle_chi2pid_branch(reader, "REC::Particle::chi2pid");
+    TTreeReaderArray<short> particle_status_branch(reader,  "REC::Particle::status");
 
-    TTreeReaderArray<double> track_pindex_branch(reader, "REC::Track::pindex");
-    TTreeReaderArray<double> track_charge_branch(reader, "REC::Track::q");
-    TTreeReaderArray<double> track_sector_branch(reader, "REC::Track::sector");
-    TTreeReaderArray<double> track_ndf_branch(reader, "REC::Track::ndf");
-    TTreeReaderArray<double> track_chi2_branch(reader, "REC::Track::chi2");
+    TTreeReaderArray<short> track_pindex_branch(reader, "REC::Track::pindex");
+    TTreeReaderArray<int> track_charge_branch(reader, "REC::Track::q");
+    TTreeReaderArray<int> track_sector_branch(reader, "REC::Track::sector");
+    TTreeReaderArray<short> track_ndf_branch(reader,    "REC::Track::NDF");
+    TTreeReaderArray<float> track_chi2_branch(reader,   "REC::Track::chi2");
 
-    TTreeReaderArray<double> calo_pindex_branch(reader, "REC::Calorimeter::pindex");
-    TTreeReaderArray<double> calo_layer_branch(reader, "REC::Calorimeter::layer");
-    TTreeReaderArray<double> calo_energy_branch(reader, "REC::Calorimeter::energy");
-    TTreeReaderArray<double> calo_lu_branch(reader, "REC::Calorimeter::lu");
-    TTreeReaderArray<double> calo_lv_branch(reader, "REC::Calorimeter::lv");
-    TTreeReaderArray<double> calo_lw_branch(reader, "REC::Calorimeter::lw");
+    TTreeReaderArray<short> calo_pindex_branch(reader, "REC::Calorimeter::pindex");
+    TTreeReaderArray<int> calo_layer_branch(reader,  "REC::Calorimeter::layer");
+    TTreeReaderArray<float> calo_energy_branch(reader, "REC::Calorimeter::energy");
+    TTreeReaderArray<float> calo_lu_branch(reader,     "REC::Calorimeter::lu");
+    TTreeReaderArray<float> calo_lv_branch(reader,     "REC::Calorimeter::lv");
+    TTreeReaderArray<float> calo_lw_branch(reader,     "REC::Calorimeter::lw");
 
-    TTreeReaderArray<double> cherenkov_pindex_branch(reader, "REC::Cherenkov::pindex");
-    TTreeReaderArray<double> cherenkov_detectorindex_branch(reader, "REC::Cherenkov::detector");
-    TTreeReaderArray<double> cherenkov_photoelectrons_branch(reader, "REC::Cherenkov::nphe");
+    TTreeReaderArray<short> cherenkov_pindex_branch(reader,         "REC::Cherenkov::pindex");
+    TTreeReaderArray<int> cherenkov_detectorindex_branch(reader,  "REC::Cherenkov::detector");
+    TTreeReaderArray<float> cherenkov_photoelectrons_branch(reader, "REC::Cherenkov::nphe");
 
-    TTreeReaderArray<double> trajectory_pindex_branch(reader, "REC::Traj::pindex");
-    TTreeReaderArray<double> trajectory_detectorindex_branch(reader, "REC::Traj::detector");
-    TTreeReaderArray<double> trajectory_layer_branch(reader, "REC::Traj::layer");
-    TTreeReaderArray<double> trajectory_x_branch(reader, "REC::Traj::x");
-    TTreeReaderArray<double> trajectory_y_branch(reader, "REC::Traj::y");
-    TTreeReaderArray<double> trajectory_z_branch(reader, "REC::Traj::z");
-    TTreeReaderArray<double> trajectory_edge_branch(reader, "REC::Traj::edge");
+    TTreeReaderArray<short> trajectory_pindex_branch(reader,        "REC::Traj::pindex");
+    TTreeReaderArray<int> trajectory_detectorindex_branch(reader, "REC::Traj::detector");
+    TTreeReaderArray<int> trajectory_layer_branch(reader,         "REC::Traj::layer");
+    TTreeReaderArray<float> trajectory_x_branch(reader,             "REC::Traj::x");
+    TTreeReaderArray<float> trajectory_y_branch(reader,             "REC::Traj::y");
+    TTreeReaderArray<float> trajectory_z_branch(reader,             "REC::Traj::z");
+    TTreeReaderArray<float> trajectory_edge_branch(reader,          "REC::Traj::edge");
 
-    TTreeReaderArray<double> fcupgated_branch(reader, "RUN::scaler::fcupgated");
+    TTreeReaderArray<float> fcupgated_branch(reader, "RUN::scaler::fcupgated");
 
-    TTreeReaderArray<double> run_number_branch(reader, "RUN::config::run");
-    TTreeReaderArray<double> event_number_branch(reader, "RUN::config::event");
+    TTreeReaderArray<int> run_number_branch(reader,   "RUN::config::run");
+    TTreeReaderArray<int> event_number_branch(reader, "RUN::config::event");
 
 
     if (!output_dir.EndsWith("/")) {
@@ -79,7 +79,7 @@ void tuple_maker(
     std::cout << "Will save output to " << output_dir + output_file << std::endl;
     TFile* outFile = TFile::Open(output_dir + output_file, "RECREATE");
     TTree* outTree = new TTree("data", "Processed Data");
-    TTree *outTree_meta = new TTree("meta", "Event level info");
+    // TTree *outTree_meta = new TTree("meta", "Event level info");
     TTree* outTree_MC = new TTree("MC", "Monte Carlo Data");
 
     // Output branches: A vector of particles for each event
@@ -90,6 +90,8 @@ void tuple_maker(
 
     std::vector<double> E_PCAL, E_ECIN, E_ECOUT;
     std::vector<double> PCAL_U, PCAL_V, PCAL_W;
+    std::vector<double> PCAL_x, PCAL_y, PCAL_z, PCAL_edge;
+
 
     std::vector<int> Nphe_HTCC, Nphe_LTCC;
 
@@ -149,6 +151,11 @@ void tuple_maker(
     outTree->Branch("DC_region3_z", &DC_region3_z);
     outTree->Branch("DC_region3_edge", &DC_region3_edge);
 
+    outTree->Branch("PCAL_x", &PCAL_x);
+    outTree->Branch("PCAL_y", &PCAL_y);
+    outTree->Branch("PCAL_z", &PCAL_z);
+    outTree->Branch("PCAL_edge", &PCAL_edge);
+
     outTree_meta->Branch("fcupgated", &fcupgated);
     outTree_meta->Branch("run_number", &run_number);
     outTree_meta->Branch("event_number", &event_number);
@@ -168,7 +175,11 @@ void tuple_maker(
         DC_region1_x.clear(); DC_region1_y.clear(); DC_region1_z.clear(); DC_region1_edge.clear();
         DC_region2_x.clear(); DC_region2_y.clear(); DC_region2_z.clear(); DC_region2_edge.clear();
         DC_region3_x.clear(); DC_region3_y.clear(); DC_region3_z.clear(); DC_region3_edge.clear();
+        PCAL_x.clear(); PCAL_y.clear(); PCAL_z.clear(); PCAL_edge.clear();
 
+        if (counter % 10000 == 0) {
+            std::cout << "Processed " << counter << " events" << std::endl;
+        }
         counter++;
 
         num_tracks = track_pindex_branch.GetSize();
@@ -178,8 +189,7 @@ void tuple_maker(
         event_number = (int) event_number_branch[0];
         outTree_meta->Fill();
 
-        // if (num_tracks == 0 || num_parts == 0) continue;
-
+        if (num_tracks == 0 || num_parts == 0) continue;
         
         // Loop over each track to fill one entry per track
         for (int i = 0; i < num_tracks; i++) {
@@ -281,16 +291,20 @@ void tuple_maker(
             double DC_region1_y_particle = 0;
             double DC_region1_z_particle = 0;
             double DC_region1_edge_particle = 0;
+            bool hits_region1 = false;
 
             double DC_region2_x_particle = 0;
             double DC_region2_y_particle = 0;
             double DC_region2_z_particle = 0;
             double DC_region2_edge_particle = 0;
+            bool hits_region2 = false;
+
 
             double DC_region3_x_particle = 0;
             double DC_region3_y_particle = 0;
             double DC_region3_z_particle = 0;
             double DC_region3_edge_particle = 0;
+            bool hits_region3 = false;
 
             // Trajectory info (DC)
             for (std::size_t j = 0; j < trajectory_pindex_branch.GetSize(); j++) {
@@ -305,17 +319,39 @@ void tuple_maker(
                     DC_region1_y_particle += trajectory_y_branch[j];
                     DC_region1_z_particle += trajectory_z_branch[j];
                     DC_region1_edge_particle += trajectory_edge_branch[j];
+                    hits_region1 = true;
                 } else if (layer == 18) { // Region 2
                     DC_region2_x_particle += trajectory_x_branch[j];
                     DC_region2_y_particle += trajectory_y_branch[j];
                     DC_region2_z_particle += trajectory_z_branch[j];
                     DC_region2_edge_particle += trajectory_edge_branch[j];
+                    hits_region2 = true;
                 } else if (layer == 36) { // Region 3
                     DC_region3_x_particle += trajectory_x_branch[j];
                     DC_region3_y_particle += trajectory_y_branch[j];
                     DC_region3_z_particle += trajectory_z_branch[j];
                     DC_region3_edge_particle += trajectory_edge_branch[j];
+                    hits_region3 = true;
                 }
+            }
+
+            if (!hits_region1) {
+                DC_region1_x_particle = -9999;
+                DC_region1_y_particle = -9999;
+                DC_region1_z_particle = -9999;
+                DC_region1_edge_particle = -9999;
+            }
+            if (!hits_region2) {
+                DC_region2_x_particle = -9999;
+                DC_region2_y_particle = -9999;
+                DC_region2_z_particle = -9999;
+                DC_region2_edge_particle = -9999;
+            }
+            if (!hits_region3) {
+                DC_region3_x_particle = -9999;
+                DC_region3_y_particle = -9999;
+                DC_region3_z_particle = -9999;
+                DC_region3_edge_particle = -9999;
             }
 
             // Push per-particle DC info into event-level vectors
@@ -334,24 +370,54 @@ void tuple_maker(
             DC_region3_z.push_back(DC_region3_z_particle);
             DC_region3_edge.push_back(DC_region3_edge_particle);
 
+            // Trajectory info (PCAL)
+            double PCAL_x_particle = 0;
+            double PCAL_y_particle = 0;
+            double PCAL_z_particle = 0;
+            double PCAL_edge_particle = 0;
+            bool hits_PCAL = false;
+
+            for (std::size_t j = 0; j < trajectory_pindex_branch.GetSize(); j++) {
+                if ((int)trajectory_pindex_branch[j] != particle_i) continue;
+
+                int detector_number = (int)trajectory_detectorindex_branch[j];
+                int layer_number = (int)trajectory_layer_branch[j];
+                if (detector_number != 7 || layer_number != 1) continue; // only PCAL
+
+                PCAL_x_particle += trajectory_x_branch[j];
+                PCAL_y_particle += trajectory_y_branch[j];
+                PCAL_z_particle += trajectory_z_branch[j];
+                PCAL_edge_particle += trajectory_edge_branch[j];
+                hits_PCAL = true;
+            }
+            if (hits_PCAL) {
+                PCAL_x.push_back(PCAL_x_particle);
+                PCAL_y.push_back(PCAL_y_particle);
+                PCAL_z.push_back(PCAL_z_particle);
+                PCAL_edge.push_back(PCAL_edge_particle);
+            } else {
+                PCAL_x.push_back(-9999);
+                PCAL_y.push_back(-9999);
+                PCAL_z.push_back(-9999);
+                PCAL_edge.push_back(-9999);
+            }
+
 
         } // end loop over tracks
         outTree->Fill();
-        
-        
     }
     // Saving the MC branches if desired
     if (save_MC)
     {
         reader.Restart();
-        TTreeReaderArray<double> MC_pid_branch(reader, "MC::Particle::pid");
-        TTreeReaderArray<double> MC_px_branch(reader, "MC::Particle::px");
-        TTreeReaderArray<double> MC_py_branch(reader, "MC::Particle::py");
-        TTreeReaderArray<double> MC_pz_branch(reader, "MC::Particle::pz");
-        TTreeReaderArray<double> MC_vx_branch(reader, "MC::Particle::vx");
-        TTreeReaderArray<double> MC_vy_branch(reader, "MC::Particle::vy");
-        TTreeReaderArray<double> MC_vz_branch(reader, "MC::Particle::vz");
-        TTreeReaderArray<double> MC_vt_branch(reader, "MC::Particle::vt");
+        TTreeReaderArray<int> MC_pid_branch(reader, "MC::Particle::pid");
+        TTreeReaderArray<float> MC_px_branch(reader, "MC::Particle::px");
+        TTreeReaderArray<float> MC_py_branch(reader, "MC::Particle::py");
+        TTreeReaderArray<float> MC_pz_branch(reader, "MC::Particle::pz");
+        TTreeReaderArray<float> MC_vx_branch(reader, "MC::Particle::vx");
+        TTreeReaderArray<float> MC_vy_branch(reader, "MC::Particle::vy");
+        TTreeReaderArray<float> MC_vz_branch(reader, "MC::Particle::vz");
+        TTreeReaderArray<float> MC_vt_branch(reader, "MC::Particle::vt");
 
         outTree_MC->Branch("MC_pid", &MC_pid);
         outTree_MC->Branch("MC_px", &MC_px);
