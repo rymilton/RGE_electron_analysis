@@ -7,7 +7,10 @@
 #include <iostream>
 #include <cmath> // for std::sqrt, std::atan2
 #include <vector>
-
+#include <filesystem>
+#include <future>
+#include <thread>
+#include <ROOT/TProcessExecutor.hxx>
 
 /*
     My whole workflow is getting tedious with all the scripts that I have to run.
@@ -35,7 +38,7 @@ std::tuple<double, double, double, double, double> calculate_DIS_quantities(doub
 
     return std::make_tuple(Q2, nu, x, y, W2);
 }
-void tuple_maker(
+void process_single_file(
     TString input_dir,
     TString input_file,
     TString output_dir,
@@ -46,12 +49,14 @@ void tuple_maker(
     if (!input_dir.EndsWith("/")) input_dir += "/";
     std::cout << "Opening file " << input_dir + input_file << std::endl;
     TFile* inFile = TFile::Open(input_dir + input_file);
+
     if (!inFile || inFile->IsZombie()) {
         std::cerr << "Error opening file " << input_dir + input_file << std::endl;
         return;
     }
 
     TTree* tree = (TTree*)inFile->Get("data");
+
     TTreeReader reader(tree);
 
     // Input branches (arrays)
@@ -93,21 +98,17 @@ void tuple_maker(
     TTreeReaderArray<float> trajectory_z_branch(reader,             "REC::Traj::z");
     TTreeReaderArray<float> trajectory_edge_branch(reader,          "REC::Traj::edge");
 
-    TTreeReaderArray<float> fcupgated_branch(reader, "RUN::scaler::fcupgated");
+    // TTreeReaderArray<float> fcupgated_branch(reader, "RUN::scaler::fcupgated");
 
-    TTreeReaderArray<int> run_number_branch(reader,   "RUN::config::run");
-    TTreeReaderArray<int> event_number_branch(reader, "RUN::config::event");
+    // TTreeReaderArray<int> run_number_branch(reader,   "RUN::config::run");
+    // TTreeReaderArray<int> event_number_branch(reader, "RUN::config::event");
 
 
-    if (!output_dir.EndsWith("/")) {
-        output_dir += "/";
-    }
-
-    std::cout << "Will save output to " << output_dir + output_file << std::endl;
-    TFile* outFile = TFile::Open(output_dir + output_file, "RECREATE");
+    std::cout << "Will save output to " << output_file << std::endl;
+    TFile* outFile = TFile::Open(output_file, "RECREATE");
     TTree* outTree_recopart = new TTree("reco_particles", "Reconstructed Particles");
     TTree* outTree_recoevent = new TTree("reco_event", "Reconstructed Event info");
-    TTree *outTree_meta = new TTree("meta", "Event level info");
+    // TTree *outTree_meta = new TTree("meta", "Event level info");
     TTree* outTree_genpart = new TTree("gen_particles", "Gen-level particles");
     TTree* outTree_genevent = new TTree("gen_event", "Gen-level Event info");
 
@@ -194,10 +195,10 @@ void tuple_maker(
     outTree_recoevent->Branch("y", &y);
     outTree_recoevent->Branch("W", &W);
 
-    outTree_meta->Branch("fcupgated", &fcupgated);
-    outTree_meta->Branch("run_number", &run_number);
-    outTree_meta->Branch("event_number", &event_number);
-    outTree_meta->Branch("num_tracks", &num_tracks);
+    // outTree_meta->Branch("fcupgated", &fcupgated);
+    // outTree_meta->Branch("run_number", &run_number);
+    // outTree_meta->Branch("event_number", &event_number);
+    // outTree_meta->Branch("num_tracks", &num_tracks);
 
     std::cout << "Number of events: " << tree->GetEntries() << std::endl;
     int counter = 0;
@@ -222,10 +223,10 @@ void tuple_maker(
 
         num_tracks = track_pindex_branch.GetSize();
         int num_parts = particle_pid_branch.GetSize();
-        fcupgated = (fcupgated_branch.GetSize()>0) ? fcupgated_branch[0] : -1;
-        run_number = (int) run_number_branch[0];
-        event_number = (int) event_number_branch[0];
-        outTree_meta->Fill();
+        // fcupgated = (fcupgated_branch.GetSize()>0) ? fcupgated_branch[0] : -1;
+        // run_number = (int) run_number_branch[0];
+        // event_number = (int) event_number_branch[0];
+        // outTree_meta->Fill();
 
         if (num_tracks == 0 || num_parts == 0) continue;
 
@@ -235,7 +236,7 @@ void tuple_maker(
         for (int i = 0; i < num_parts; i++) {
             int pid_i = (int) particle_pid_branch[i];
             int status_i = (int) particle_status_branch[i];
-            if (pid_i == 11 && status<0)
+            if (pid_i == 11 && status_i<0)
             {
                 has_trigger_electron = true;
                 double px_i = particle_px_branch[i];
@@ -248,16 +249,17 @@ void tuple_maker(
                     break;
                 }
 
-                Q2.push_back(Q2_i);
-                nu.push_back(nu_i);
-                x.push_back(x_i);
-                y.push_back(y_i);
-                W.push_back(W_i);
+                Q2 = Q2_i;
+                nu = nu_i;
+                x = x_i;
+                y = y_i;
+                W = std::sqrt(W2_i);
 
                 break; // no need to loop over more particles once we've found the trigger electron
             }
         }
         if (!has_trigger_electron) continue;
+
         
         // Loop over each track to fill one entry per track
         for (int i = 0; i < num_tracks; i++) {
@@ -511,7 +513,7 @@ void tuple_maker(
             bool calculated_gen_DIS = false;
             for (int i = 0; i < num_gen_parts; i++)
             {
-                gen_pid_i = (int) gen_pid_branch[i];
+                int gen_pid_i = (int) gen_pid_branch[i];
                 // Assuming that the first electron found is the scattered electron
                 if (gen_pid_i == 11 && !calculated_gen_DIS) // if it's an electron, calculate the gen-level DIS quantities for the event
                 {
@@ -523,7 +525,7 @@ void tuple_maker(
                     gen_nu = gen_nu_i;
                     gen_x = gen_x_i;
                     gen_y = gen_y_i;
-                    gen_W = std::sqrt(gen_W2_i);
+                    gen_W = std::sqrt(std::max(0.0, gen_W2_i));
                     calculated_gen_DIS = true; // only calculate DIS quantities for the first electron found in the gen particles list, which should be the trigger electron
                 }
                 gen_pid.push_back((int) gen_pid_branch[i]);
@@ -540,11 +542,12 @@ void tuple_maker(
         }
         
     }
+    
     std::cout << "Processed " << counter << " events" << std::endl;
-
-    outFile->cd();0
+    outFile->cd();
     outTree_recopart->Write();
-    outTree_meta->Write();
+    outTree_recoevent->Write();
+    // outTree_meta->Write();
     if (save_MC)
     {
         outTree_genpart->Write();
@@ -553,3 +556,167 @@ void tuple_maker(
     outFile->Close();
     inFile->Close();
 }
+
+void tuple_maker(
+    TString input_path,
+    TString output_dir,
+    Bool_t save_MC,
+    int n_workers = 4
+)
+{
+    std::vector<TString> files;
+
+    // Single file case
+    if (input_path.EndsWith(".root"))
+    {
+        files.push_back(input_path);
+    }
+    // Directory case
+    else
+    {
+        for (const auto& entry : std::filesystem::directory_iterator(input_path.Data()))
+        {
+            if (entry.path().extension() == ".root")
+            {
+                files.push_back(entry.path().filename().c_str());
+            }
+        }
+    }
+
+
+    std::cout 
+        << "Found "
+        << files.size()
+        << " files"
+        << std::endl;
+
+
+    // Function to generate output name
+    auto make_output_name = [&](TString filename)
+    {
+        TString run_number = filename;
+
+        run_number.ReplaceAll(".root", "");
+
+        Ssiz_t pos = run_number.Last('.');
+        if (pos != kNPOS)
+        {
+            run_number = run_number(
+                pos + 1,
+                run_number.Length() - pos - 1
+            );
+        }
+
+        TString outname;
+
+        outname.Form(
+            "%s/ntuples_%s.root",
+            output_dir.Data(),
+            run_number.Data()
+        );
+
+        return outname;
+    };
+    
+
+
+
+    // Single file case
+    if (files.size() == 1)
+    {
+        TString filename = files[0];
+
+        TString dir;
+        TString file;
+
+
+        if (input_path.EndsWith(".root"))
+        {
+            std::filesystem::path p(input_path.Data());
+
+            dir  = p.parent_path().string();
+            file = p.filename().string();
+        }
+        else
+        {
+            dir = input_path;
+            file = filename;
+        }
+
+
+        TString outname = make_output_name(file);
+
+
+        process_single_file(
+            dir,
+            file,
+            output_dir,
+            outname,
+            save_MC
+        );
+
+        return;
+    }
+
+    struct FileTask
+    {
+        TString input_dir;
+        TString file;
+        TString output_dir;
+        TString output_file;
+        Bool_t save_MC;
+    };
+
+    std::cout 
+        << "Processing "
+        << files.size()
+        << " files using "
+        << n_workers
+        << " workers"
+        << std::endl;
+
+
+
+    ROOT::TProcessExecutor pool(n_workers);
+    
+
+    std::vector<FileTask> tasks;
+
+    for (auto& file : files)
+    {
+        TString outname = make_output_name(file);
+        tasks.push_back(
+            {
+                input_path,
+                file,
+                output_dir,
+                outname,
+                save_MC
+            }
+        );
+    }
+
+
+    auto out = pool.Map(
+        [](FileTask task)
+        {
+
+            process_single_file(
+                task.input_dir,
+                task.file,
+                task.output_dir,
+                task.output_file,
+                task.save_MC
+            );
+
+            return 0;
+
+        },
+        tasks
+    );
+}
+
+
+    // std::cout 
+    //     << "Finished processing directory"
+    //     << std::endl;
