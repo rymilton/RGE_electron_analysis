@@ -106,11 +106,9 @@ void process_single_file(
 
     std::cout << "Will save output to " << output_file << std::endl;
     TFile* outFile = TFile::Open(output_file, "RECREATE");
-    TTree* outTree_recopart = new TTree("reco_particles", "Reconstructed Particles");
-    TTree* outTree_recoevent = new TTree("reco_event", "Reconstructed Event info");
+    TTree* outTree_reconstructed = new TTree("reconstructed", "Reconstructed particles and event quantities");
     // TTree *outTree_meta = new TTree("meta", "Event level info");
-    TTree* outTree_genpart = new TTree("gen_particles", "Gen-level particles");
-    TTree* outTree_genevent = new TTree("gen_event", "Gen-level Event info");
+    TTree* outTree_gen = new TTree("gen", "Gen-level particles and event quantities");
 
     // Output branches: A vector of particles for each event
     // Kinematic and track quantities for each particle
@@ -138,62 +136,62 @@ void process_single_file(
     std::vector<double> gen_px, gen_py, gen_pz, gen_vx, gen_vy, gen_vz, gen_vt;
     double gen_Q2, gen_nu, gen_x, gen_y, gen_W;
 
-    outTree_recopart->Branch("beta", &beta);
-    outTree_recopart->Branch("charge", &charge);
-    outTree_recopart->Branch("chi2pid", &chi2pid);
-    outTree_recopart->Branch("pid", &pid);
-    outTree_recopart->Branch("p_x", &px);
-    outTree_recopart->Branch("p_y", &py);
-    outTree_recopart->Branch("p_z", &pz);
-    outTree_recopart->Branch("p", &p);
-    outTree_recopart->Branch("status", &status);
-    outTree_recopart->Branch("v_t", &vt);
-    outTree_recopart->Branch("v_x", &vx);
-    outTree_recopart->Branch("v_y", &vy);
-    outTree_recopart->Branch("v_z", &vz);
-    outTree_recopart->Branch("theta", &theta);
-    outTree_recopart->Branch("phi", &phi);
+    outTree_reconstructed->Branch("beta", &beta);
+    outTree_reconstructed->Branch("charge", &charge);
+    outTree_reconstructed->Branch("chi2pid", &chi2pid);
+    outTree_reconstructed->Branch("pid", &pid);
+    outTree_reconstructed->Branch("p_x", &px);
+    outTree_reconstructed->Branch("p_y", &py);
+    outTree_reconstructed->Branch("p_z", &pz);
+    outTree_reconstructed->Branch("p", &p);
+    outTree_reconstructed->Branch("status", &status);
+    outTree_reconstructed->Branch("v_t", &vt);
+    outTree_reconstructed->Branch("v_x", &vx);
+    outTree_reconstructed->Branch("v_y", &vy);
+    outTree_reconstructed->Branch("v_z", &vz);
+    outTree_reconstructed->Branch("theta", &theta);
+    outTree_reconstructed->Branch("phi", &phi);
 
-    outTree_recopart->Branch("track_charge", &track_charge);
-    outTree_recopart->Branch("sector", &sector);
-    outTree_recopart->Branch("NDF", &track_ndf);
-    outTree_recopart->Branch("chi2", &track_chi2);
+    outTree_reconstructed->Branch("track_charge", &track_charge);
+    outTree_reconstructed->Branch("sector", &sector);
+    outTree_reconstructed->Branch("NDF", &track_ndf);
+    outTree_reconstructed->Branch("chi2", &track_chi2);
 
-    outTree_recopart->Branch("E_PCAL", &E_PCAL);
-    outTree_recopart->Branch("E_ECIN", &E_ECIN);
-    outTree_recopart->Branch("E_ECOUT", &E_ECOUT);
-    outTree_recopart->Branch("PCAL_U", &PCAL_U);
-    outTree_recopart->Branch("PCAL_V", &PCAL_V);
-    outTree_recopart->Branch("PCAL_W", &PCAL_W);
+    outTree_reconstructed->Branch("E_PCAL", &E_PCAL);
+    outTree_reconstructed->Branch("E_ECIN", &E_ECIN);
+    outTree_reconstructed->Branch("E_ECOUT", &E_ECOUT);
+    outTree_reconstructed->Branch("PCAL_U", &PCAL_U);
+    outTree_reconstructed->Branch("PCAL_V", &PCAL_V);
+    outTree_reconstructed->Branch("PCAL_W", &PCAL_W);
 
-    outTree_recopart->Branch("Nphe_HTCC", &Nphe_HTCC);
-    outTree_recopart->Branch("Nphe_LTCC", &Nphe_LTCC);
+    outTree_reconstructed->Branch("Nphe_HTCC", &Nphe_HTCC);
+    outTree_reconstructed->Branch("Nphe_LTCC", &Nphe_LTCC);
 
-    outTree_recopart->Branch("DC_region1_x", &DC_region1_x);
-    outTree_recopart->Branch("DC_region1_y", &DC_region1_y);
-    outTree_recopart->Branch("DC_region1_z", &DC_region1_z);
-    outTree_recopart->Branch("DC_region1_edge", &DC_region1_edge);
+    outTree_reconstructed->Branch("DC_region1_x", &DC_region1_x);
+    outTree_reconstructed->Branch("DC_region1_y", &DC_region1_y);
+    outTree_reconstructed->Branch("DC_region1_z", &DC_region1_z);
+    outTree_reconstructed->Branch("DC_region1_edge", &DC_region1_edge);
 
-    outTree_recopart->Branch("DC_region2_x", &DC_region2_x);
-    outTree_recopart->Branch("DC_region2_y", &DC_region2_y);
-    outTree_recopart->Branch("DC_region2_z", &DC_region2_z);
-    outTree_recopart->Branch("DC_region2_edge", &DC_region2_edge);
+    outTree_reconstructed->Branch("DC_region2_x", &DC_region2_x);
+    outTree_reconstructed->Branch("DC_region2_y", &DC_region2_y);
+    outTree_reconstructed->Branch("DC_region2_z", &DC_region2_z);
+    outTree_reconstructed->Branch("DC_region2_edge", &DC_region2_edge);
 
-    outTree_recopart->Branch("DC_region3_x", &DC_region3_x);
-    outTree_recopart->Branch("DC_region3_y", &DC_region3_y);
-    outTree_recopart->Branch("DC_region3_z", &DC_region3_z);
-    outTree_recopart->Branch("DC_region3_edge", &DC_region3_edge);
+    outTree_reconstructed->Branch("DC_region3_x", &DC_region3_x);
+    outTree_reconstructed->Branch("DC_region3_y", &DC_region3_y);
+    outTree_reconstructed->Branch("DC_region3_z", &DC_region3_z);
+    outTree_reconstructed->Branch("DC_region3_edge", &DC_region3_edge);
 
-    outTree_recopart->Branch("PCAL_x", &PCAL_x);
-    outTree_recopart->Branch("PCAL_y", &PCAL_y);
-    outTree_recopart->Branch("PCAL_z", &PCAL_z);
-    outTree_recopart->Branch("PCAL_edge", &PCAL_edge);
+    outTree_reconstructed->Branch("PCAL_x", &PCAL_x);
+    outTree_reconstructed->Branch("PCAL_y", &PCAL_y);
+    outTree_reconstructed->Branch("PCAL_z", &PCAL_z);
+    outTree_reconstructed->Branch("PCAL_edge", &PCAL_edge);
 
-    outTree_recoevent->Branch("Q2", &Q2);
-    outTree_recoevent->Branch("nu", &nu);
-    outTree_recoevent->Branch("x", &x);
-    outTree_recoevent->Branch("y", &y);
-    outTree_recoevent->Branch("W", &W);
+    outTree_reconstructed->Branch("Q2", &Q2);
+    outTree_reconstructed->Branch("nu", &nu);
+    outTree_reconstructed->Branch("x", &x);
+    outTree_reconstructed->Branch("y", &y);
+    outTree_reconstructed->Branch("W", &W);
 
     // outTree_meta->Branch("fcupgated", &fcupgated);
     // outTree_meta->Branch("run_number", &run_number);
@@ -474,8 +472,7 @@ void process_single_file(
 
 
         } // end loop over tracks
-        outTree_recopart->Fill();
-        outTree_recoevent->Fill();
+        outTree_reconstructed->Fill();
     }
     // Saving the MC branches if desired
     if (save_MC)
@@ -490,20 +487,20 @@ void process_single_file(
         TTreeReaderArray<float> gen_vz_branch(reader, "MC::Particle::vz");
         TTreeReaderArray<float> gen_vt_branch(reader, "MC::Particle::vt");
 
-        outTree_genpart->Branch("gen_pid", &gen_pid);
-        outTree_genpart->Branch("gen_px", &gen_px);
-        outTree_genpart->Branch("gen_py", &gen_py);
-        outTree_genpart->Branch("gen_pz", &gen_pz);
-        outTree_genpart->Branch("gen_vx", &gen_vx);
-        outTree_genpart->Branch("gen_vy", &gen_vy);
-        outTree_genpart->Branch("gen_vz", &gen_vz);
-        outTree_genpart->Branch("gen_vt", &gen_vt);
+        outTree_gen->Branch("gen_pid", &gen_pid);
+        outTree_gen->Branch("gen_px", &gen_px);
+        outTree_gen->Branch("gen_py", &gen_py);
+        outTree_gen->Branch("gen_pz", &gen_pz);
+        outTree_gen->Branch("gen_vx", &gen_vx);
+        outTree_gen->Branch("gen_vy", &gen_vy);
+        outTree_gen->Branch("gen_vz", &gen_vz);
+        outTree_gen->Branch("gen_vt", &gen_vt);
 
-        outTree_genevent->Branch("gen_Q2", &gen_Q2);
-        outTree_genevent->Branch("gen_nu", &gen_nu);
-        outTree_genevent->Branch("gen_x", &gen_x);
-        outTree_genevent->Branch("gen_y", &gen_y);
-        outTree_genevent->Branch("gen_W", &gen_W);
+        outTree_gen->Branch("gen_Q2", &gen_Q2);
+        outTree_gen->Branch("gen_nu", &gen_nu);
+        outTree_gen->Branch("gen_x", &gen_x);
+        outTree_gen->Branch("gen_y", &gen_y);
+        outTree_gen->Branch("gen_W", &gen_W);
         
         while(reader.Next())
         {   
@@ -537,21 +534,18 @@ void process_single_file(
                 gen_vz.push_back(gen_vz_branch[i]);
                 gen_vt.push_back(gen_vt_branch[i]);
             }
-            outTree_genpart->Fill();
-            outTree_genevent->Fill();
+            outTree_gen->Fill();
         }
         
     }
     
     std::cout << "Processed " << counter << " events" << std::endl;
     outFile->cd();
-    outTree_recopart->Write();
-    outTree_recoevent->Write();
+    outTree_reconstructed->Write();
     // outTree_meta->Write();
     if (save_MC)
     {
-        outTree_genpart->Write();
-        outTree_genevent->Write();
+        outTree_gen->Write();
     }
     outFile->Close();
     inFile->Close();
