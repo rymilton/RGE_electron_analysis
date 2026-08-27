@@ -1,13 +1,37 @@
+/*
+ hipo2root — convert CLAS12 .hipo files to .root, several files at a time.
+
+ Usage:
+   ./hipo2root <input_dir> <output_dir> <save_MC 0|1> [njobs] file1.hipo [file2.hipo ...]
+
+ Example — two files from one run directory, 16 workers, no MC:
+   ./hipo2root /cache/clas12/rg-e/production/spring2024/pass1/torus-1/C_D2/dst/recon/020030/ \
+               /volatile/clas12/rmilton/rge_datasets/pass1/torus-1/C_D2/020030/root/ \
+               0 16 file1.hipo file2.hipo
+
+ File names are relative to <input_dir>; each fileN.hipo is written to <output_dir>
+ as fileN.root. To convert a whole run, let the shell expand the glob and pass the
+ basenames — see scripts/hipo2root.sh.
+*/
+
 #include <cstdlib>
 #include <iostream>
 #include <map>
 #include <string>
 #include <vector>
 #include <cstdint>
+#include <cctype>
+#include <algorithm>
+#include <unistd.h>
+#include <chrono>
 
 #include "reader.h"
 #include "TFile.h"
 #include "TTree.h"
+#include "ROOT/TProcessExecutor.hxx"
+
+// Number of worker processes used when njobs is not given on the command line.
+static const int kDefaultNJobs = 4;
 
 struct rec_particles_holder {
     std::vector<int> pid;
@@ -51,6 +75,18 @@ struct rec_track_holder {
 
     void clear() {
         index.clear(); pindex.clear(); NDF.clear(); q.clear(); sector.clear(); chi2.clear();
+    }
+};
+
+struct rec_ftrack_holder {
+    std::vector<short> index, pindex, status, NDF, hbindex;
+    std::vector<int> detector, sector, q;
+    std::vector<float> chi2, px, py, pz, vx, vy, vz;
+
+    void clear() {
+        index.clear(); pindex.clear(); status.clear(); NDF.clear(); hbindex.clear();
+        detector.clear(); sector.clear(); q.clear();
+        chi2.clear(); px.clear(); py.clear(); pz.clear(); vx.clear(); vy.clear(); vz.clear();
     }
 };
 
@@ -114,23 +150,20 @@ struct run_config_holder {
     }
 };
 
-int main(int argc, char** argv) {
+// Convert one .hipo file into one .root file. Returns false if the file could not be read.
+bool processFile(const TString& inputDir, const TString& inputFile,
+                 const TString& outputDir, const TString& outputFile,
+                 bool saveMC) {
 
-    if (argc < 6) {
-        std::cerr << "Usage: " << argv[0] << "input_directory input.hipo output_directory output_name save_MC(0 or 1)" << std::endl;
-        return 1;
+    TString inputPath = inputDir + inputFile;
+    if (access(inputPath.Data(), R_OK) != 0) {
+        std::cerr << "Cannot read input file: " << inputPath << std::endl;
+        return false;
     }
 
-    TString inputDir  = argv[1];
-    TString inputFile = argv[2];
-    TString outputDir = argv[3];
-    TString outputFile = argv[4];
-    bool saveMC = std::stoi(argv[5]) != 0;
-
-
     hipo::reader reader;
-    std::cout << "Opening file: " << inputDir+inputFile << std::endl;
-    reader.open(inputDir+inputFile);
+    std::cout << "Opening file: " << inputPath << std::endl;
+    reader.open(inputPath);
 
     std::cout<< "Reading dictionary..." << std::endl;
     hipo::dictionary factory;
@@ -139,6 +172,7 @@ int main(int argc, char** argv) {
     hipo::bank rec_particles_bank(factory.getSchema("REC::Particle"));
     hipo::bank rec_traj_bank(factory.getSchema("REC::Traj"));
     hipo::bank rec_track_bank(factory.getSchema("REC::Track"));
+    hipo::bank rec_ftrack_bank(factory.getSchema("REC::FTrack"));
     hipo::bank rec_calorimeter_bank(factory.getSchema("REC::Calorimeter"));
     hipo::bank rec_cherenkov_bank(factory.getSchema("REC::Cherenkov"));
     hipo::bank mc_particle_bank(factory.getSchema("MC::Particle"));
@@ -148,11 +182,16 @@ int main(int argc, char** argv) {
 
     std::cout << "Creating output file: " << outputDir+outputFile << std::endl;
     TFile outfile(outputDir+outputFile, "RECREATE");
+    if (outfile.IsZombie()) {
+        std::cerr << "Cannot create output file: " << outputDir+outputFile << std::endl;
+        return false;
+    }
     TTree tree("data", "");
     std::cout << "Creating TTree and branches..." << std::endl;
     rec_particles_holder recParticles;
     rec_traj_holder recTraj;
     rec_track_holder recTrack;
+    rec_ftrack_holder recFTrack;
     rec_calorimeter_holder recCalorimeter;
     rec_cherenkov_holder recCherenkov;
     mc_particle_holder mcParticles;
@@ -197,6 +236,23 @@ int main(int argc, char** argv) {
     tree.Branch("REC::Track::q", &recTrack.q);
     tree.Branch("REC::Track::sector", &recTrack.sector);
     tree.Branch("REC::Track::chi2", &recTrack.chi2);
+
+    // REC::FTrack branches
+    tree.Branch("REC::FTrack::pindex", &recFTrack.pindex);
+    tree.Branch("REC::FTrack::index", &recFTrack.index);
+    tree.Branch("REC::FTrack::status", &recFTrack.status);
+    tree.Branch("REC::FTrack::NDF", &recFTrack.NDF);
+    tree.Branch("REC::FTrack::hbindex", &recFTrack.hbindex);
+    tree.Branch("REC::FTrack::detector", &recFTrack.detector);
+    tree.Branch("REC::FTrack::sector", &recFTrack.sector);
+    tree.Branch("REC::FTrack::q", &recFTrack.q);
+    tree.Branch("REC::FTrack::chi2", &recFTrack.chi2);
+    tree.Branch("REC::FTrack::px", &recFTrack.px);
+    tree.Branch("REC::FTrack::py", &recFTrack.py);
+    tree.Branch("REC::FTrack::pz", &recFTrack.pz);
+    tree.Branch("REC::FTrack::vx", &recFTrack.vx);
+    tree.Branch("REC::FTrack::vy", &recFTrack.vy);
+    tree.Branch("REC::FTrack::vz", &recFTrack.vz);
 
     // REC::Calorimeter branches
     tree.Branch("REC::Calorimeter::pindex", &recCalorimeter.pindex);
@@ -251,15 +307,21 @@ int main(int argc, char** argv) {
     hipo::event event;
     int counter = 0;
     std::cout << "Processing events..." << std::endl;
+    auto startTime = std::chrono::steady_clock::now();
     while (reader.next() == true) {
         if (counter % 10000 == 0) {
-            std::cout << "Processed " << counter << " events" << std::endl;
+            auto now = std::chrono::steady_clock::now();
+            double elapsedSec = std::chrono::duration<double>(now - startTime).count();
+            double avgMsPerEvent = (counter > 0) ? (elapsedSec / counter) * 1000.0 : 0.0;
+            std::cout << "Processed " << counter << " events"
+                       << " (avg " << avgMsPerEvent << " ms/event)" << std::endl;
         }
         reader.read(event);
 
         recParticles.clear();
         recTraj.clear();
         recTrack.clear();
+        recFTrack.clear();
         recCalorimeter.clear();
         recCherenkov.clear();
         runScalers.clear();
@@ -338,6 +400,41 @@ int main(int argc, char** argv) {
             recTrack.q.push_back(rec_track_bank.getByte("q", row));
             recTrack.sector.push_back(rec_track_bank.getByte("sector", row));
             recTrack.chi2.push_back(rec_track_bank.getFloat("chi2", row));
+        }
+
+        event.getStructure(rec_ftrack_bank);
+        nrows = rec_ftrack_bank.getRows();
+        recFTrack.index.reserve(nrows);
+        recFTrack.pindex.reserve(nrows);
+        recFTrack.status.reserve(nrows);
+        recFTrack.NDF.reserve(nrows);
+        recFTrack.hbindex.reserve(nrows);
+        recFTrack.detector.reserve(nrows);
+        recFTrack.sector.reserve(nrows);
+        recFTrack.q.reserve(nrows);
+        recFTrack.chi2.reserve(nrows);
+        recFTrack.px.reserve(nrows);
+        recFTrack.py.reserve(nrows);
+        recFTrack.pz.reserve(nrows);
+        recFTrack.vx.reserve(nrows);
+        recFTrack.vy.reserve(nrows);
+        recFTrack.vz.reserve(nrows);
+        for (int row = 0; row < nrows; row++) {
+            recFTrack.index.push_back(rec_ftrack_bank.getShort("index", row));
+            recFTrack.pindex.push_back(rec_ftrack_bank.getShort("pindex", row));
+            recFTrack.status.push_back(rec_ftrack_bank.getShort("status", row));
+            recFTrack.NDF.push_back(rec_ftrack_bank.getShort("NDF", row));
+            recFTrack.hbindex.push_back(rec_ftrack_bank.getShort("hbindex", row));
+            recFTrack.detector.push_back(rec_ftrack_bank.getByte("detector", row));
+            recFTrack.sector.push_back(rec_ftrack_bank.getByte("sector", row));
+            recFTrack.q.push_back(rec_ftrack_bank.getByte("q", row));
+            recFTrack.chi2.push_back(rec_ftrack_bank.getFloat("chi2", row));
+            recFTrack.px.push_back(rec_ftrack_bank.getFloat("px", row));
+            recFTrack.py.push_back(rec_ftrack_bank.getFloat("py", row));
+            recFTrack.pz.push_back(rec_ftrack_bank.getFloat("pz", row));
+            recFTrack.vx.push_back(rec_ftrack_bank.getFloat("vx", row));
+            recFTrack.vy.push_back(rec_ftrack_bank.getFloat("vy", row));
+            recFTrack.vz.push_back(rec_ftrack_bank.getFloat("vz", row));
         }
 
         event.getStructure(rec_calorimeter_bank);
@@ -453,6 +550,121 @@ int main(int argc, char** argv) {
     tree.Write();
     outfile.Close();
 
-    std::cout << "Processed events = " << counter << std::endl;
+    std::cout << "Processed events = " << counter << " (" << inputFile << ")" << std::endl;
+    return true;
+}
+
+// Derive "name.root" from "name.hipo"
+std::string deriveOutputName(const std::string& hipoName) {
+    std::string out = hipoName;
+    const std::string suffix = ".hipo";
+    if (out.size() >= suffix.size() &&
+        out.compare(out.size() - suffix.size(), suffix.size(), suffix) == 0) {
+        out = out.substr(0, out.size() - suffix.size());
+    }
+    return out + ".root";
+}
+
+bool isInteger(const std::string& s) {
+    if (s.empty()) return false;
+    for (char c : s) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) return false;
+    }
+    return true;
+}
+
+// Adding / to end of directory if missing
+TString withTrailingSlash(const char* dir) {
+    std::string d(dir);
+    if (!d.empty() && d.back() != '/') d += '/';
+    return TString(d.c_str());
+}
+
+int main(int argc, char** argv) {
+
+    if (argc < 5) {
+        std::cerr << "Usage: " << argv[0]
+                   << " input_directory output_directory save_MC(0 or 1) [njobs] file1.hipo [file2.hipo ...]"
+                   << std::endl;
+        std::cerr << "  Files are converted in parallel across njobs forked workers"
+                   << " (default " << kDefaultNJobs << ")." << std::endl;
+        std::cerr << "  Each fileN.hipo is written to output_directory as fileN.root."
+                   << std::endl;
+        return 1;
+    }
+
+    TString inputDir  = withTrailingSlash(argv[1]);
+    TString outputDir = withTrailingSlash(argv[2]);
+
+    // Checking if saveMCArg is 0 or 1
+    const std::string saveMCArg = argv[3];
+    if (saveMCArg != "0" && saveMCArg != "1") {
+        std::cerr << "save_MC must be 0 or 1, got: \"" << saveMCArg << "\"" << std::endl;
+        return 1;
+    }
+    const bool saveMC = (saveMCArg == "1");
+
+    // njobs is either the 4th argument passed by user or defaults to kDefaultNJobs
+    int njobs = kDefaultNJobs;
+    int firstFileArg = 4;
+    if (isInteger(argv[4])) {
+        njobs = std::stoi(argv[4]);
+        firstFileArg = 5;
+    }
+
+    std::vector<std::string> inputFiles;
+    for (int i = firstFileArg; i < argc; i++) {
+        inputFiles.push_back(argv[i]);
+    }
+
+    if (inputFiles.empty()) {
+        std::cerr << "No input files given." << std::endl;
+        return 1;
+    }
+
+    // Limit njobs to the number of input files, but at least 1.
+    njobs = std::max(1, std::min(njobs, static_cast<int>(inputFiles.size())));
+    std::cout << "Converting " << inputFiles.size() << " file(s) using "
+              << njobs << " worker(s)." << std::endl;
+
+    // A single worker does the work in this process, no fork needed.
+    if (njobs == 1) {
+        bool anyFailed = false;
+        for (const auto& fname : inputFiles) {
+            if (!processFile(inputDir, TString(fname), outputDir,
+                             TString(deriveOutputName(fname)), saveMC)) {
+                anyFailed = true;
+            }
+        }
+        return anyFailed ? 1 : 0;
+    }
+
+    // One task per file. TProcessExecutor forks njobs workers and hands each worker
+    // the next unprocessed file as it frees up, so one slow file cannot stall the rest.
+    ROOT::TProcessExecutor pool(njobs);
+    std::vector<int> results = pool.Map(
+        [inputDir, outputDir, saveMC](const std::string& fname) {
+            return processFile(inputDir, TString(fname.c_str()), outputDir,
+                               TString(deriveOutputName(fname).c_str()), saveMC) ? 0 : 1;
+        },
+        inputFiles);
+
+    // Results come back in input order, so results[i] belongs to inputFiles[i].
+    std::vector<std::string> failedFiles;
+    for (size_t i = 0; i < results.size(); i++) {
+        if (results[i] != 0) failedFiles.push_back(inputFiles[i]);
+    }
+
+    std::cout << "All workers finished." << std::endl;
+
+    if (!failedFiles.empty()) {
+        std::cerr << failedFiles.size() << " of " << inputFiles.size()
+                  << " file(s) failed to convert:" << std::endl;
+        for (const auto& fname : failedFiles) {
+            std::cerr << "  " << fname << std::endl;
+        }
+        return 1;
+    }
+
     return 0;
 }
