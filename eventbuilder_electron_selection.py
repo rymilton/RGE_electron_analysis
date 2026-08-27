@@ -1,10 +1,6 @@
 import argparse
-import uproot
-import glob
 import awkward as ak
 import numpy as np
-import time
-import h5py as h5
 import os
 from utils import LoadYaml, open_data, save_output
 
@@ -54,28 +50,41 @@ def parse_arguments():
 
 
 def get_eventbuilder_electrons(events):
-    status = events["reconstructed"]["status"]
+    # 1. Create a mask at the particle level (avoids pid[:, 0] crashes)
     pid = events["reconstructed"]["pid"]
-    trigger_electron_first_mask = (pid[:, 0] == 11) & (status[:, 0] < 0)
-    events = events[trigger_electron_first_mask]
+    status = events["reconstructed"]["status"]
 
-    trigger_electron_mask = (events["reconstructed"]["pid"] == 11) & (events["reconstructed"]["status"] <= -2000) & (events["reconstructed"]["status"] > -4000)
-    events["reconstructed"] = events["reconstructed"][trigger_electron_mask]
-    number_of_electrons = ak.num(events["reconstructed"]["pid"], axis = 1)
-    # Removing events without any trigger electrons
-    events = events[number_of_electrons > 0]
-    if ak.any(number_of_electrons>1):
+    trigger_electron_mask = (pid == 11) & (status <= -2000) & (status > -4000)
+
+    # 2. Filter particles, keeping the jagged event structure intact
+    jagged_electrons = events["reconstructed"][trigger_electron_mask]
+
+    # 3. Count trigger electrons per event to build the flag
+    number_of_electrons = ak.sum(trigger_electron_mask, axis=1)
+    pass_trigger = number_of_electrons > 0
+
+    if ak.any(number_of_electrons > 1):
         raise ValueError("More than 1 trigger electron found in some events")
-    
-    events["reconstructed"] = events["reconstructed"][:,0]
-    sampling_fraction = (events["reconstructed"]["E_PCAL"] + events["reconstructed"]["E_ECOUT"] + events["reconstructed"]["E_ECIN"]) / events["reconstructed"]["p"]
-    events["reconstructed"] = ak.with_field(
-        events["reconstructed"],
-        sampling_fraction,
-        "SF"
-    )
-    print(f"Have {len(events)} events after event builder electron cuts")
+
+    # 4. Flatten EVERY field to one value per event; events with no trigger
+    #    electron (0-length list -> None via firsts) get padded to -9999
+    flat_fields = {
+        field: ak.fill_none(ak.firsts(jagged_electrons[field]), -9999)
+        for field in jagged_electrons.fields
+    }
+    electrons = ak.zip(flat_fields, depth_limit=1)
+
+    # 5. Sampling Fraction computed from the now-flat fields; -9999 where it doesn't pass
+    sf_raw = (electrons["E_PCAL"] + electrons["E_ECOUT"] + electrons["E_ECIN"]) / electrons["p"]
+    sf = ak.where(pass_trigger, sf_raw, -9999.0)
+    electrons = ak.with_field(electrons, sf, "SF")
+
+    # 6. Attach back
+    events = ak.with_field(events, pass_trigger, "pass_trigger")
+    events["reconstructed"] = electrons
+
     return events
+
 def calc_p(px, py, pz):
     return np.sqrt(px**2 + py**2 + pz**2)
 def calc_theta_lab(px, py, pz):
@@ -97,26 +106,40 @@ def calc_W2(p, beam_E, theta):
 
 def get_DIS_quantities(events):
     E_beam = 10.547
-    # Removing events where the reconstructed electron has a momentum higher than the beam energy
-    events = events[events["reconstructed"]["p"]<=E_beam]
-    print(f"Have {len(events)} after removing electrons with momentum > Ebeam")
-    electrons = events["reconstructed"]
-    electrons["nu"] = calc_nu(electrons["p"], E_beam)
-    electrons["Q2"] = calc_Q2(electrons["p"], E_beam, electrons["theta"])
-    electrons["x"] = calc_xb(electrons["Q2"], E_beam, electrons["nu"])
-    electrons["y"] = calc_y(electrons["p"], E_beam)
-    # Caluclating W2 and only keeping events with positive W2
-    W2 = calc_W2(electrons["p"], E_beam, electrons["theta"])
-    valid_W2_mask = W2>0
-    electrons = electrons[valid_W2_mask]
-    print(f"Have {len(electrons)} after removing electrons negative W2 values")
-    electrons["W"] = np.sqrt(W2[valid_W2_mask])
-    electrons["theta_degrees"] = electrons["theta"]*180/np.pi
-    electrons["phi_degrees"] = electrons["phi"]*180/np.pi
 
-    events = events[valid_W2_mask]
-    events["reconstructed"] = electrons
+    electrons = events["reconstructed"]   # now fully flat: one record/event, -9999-padded
 
+    p = electrons["p"]
+    theta = electrons["theta"]
+
+    pass_dis = ak.to_numpy(events["pass_trigger"] & (p <= E_beam))
+
+    p_arr = ak.to_numpy(p)
+    theta_arr = ak.to_numpy(theta)
+
+    with np.errstate(invalid="ignore", divide="ignore"):
+        nu_all = calc_nu(p_arr, E_beam)
+        Q2_all = calc_Q2(p_arr, E_beam, theta_arr)
+        y_all  = calc_y(p_arr, E_beam)
+        W2_all = calc_W2(p_arr, E_beam, theta_arr)
+        x_all  = calc_xb(Q2_all, E_beam, nu_all)
+
+    nu = np.where(pass_dis, nu_all, -9999.0)
+    Q2 = np.where(pass_dis, Q2_all, -9999.0)
+    x  = np.where(pass_dis, x_all,  -9999.0)
+    y  = np.where(pass_dis, y_all,  -9999.0)
+
+    valid_W_mask = pass_dis & (W2_all > 0)
+    with np.errstate(invalid="ignore"):
+        W = np.where(valid_W_mask, np.sqrt(np.where(W2_all > 0, W2_all, 0.0)), -9999.0)
+
+    electrons = ak.with_field(electrons, nu, "nu")
+    electrons = ak.with_field(electrons, Q2, "Q2")
+    electrons = ak.with_field(electrons, x,  "x")
+    electrons = ak.with_field(electrons, y,  "y")
+    electrons = ak.with_field(electrons, W,  "W")
+
+    events = ak.with_field(events, electrons, "reconstructed")
     return events
 def get_DIS_quantities_MC(events):
     E_beam = 10.547
@@ -146,10 +169,10 @@ def get_MC_electrons(events):
 def main():
     flags = parse_arguments()
     
-    parameters = LoadYaml(flags.config, flags.config_directory)
+    parameters = LoadYaml(os.path.join(flags.config_directory, flags.config))
 
     events_array = open_data(
-        data_path = flags.input_file,
+        data_paths = [flags.input_file],
         branches_to_open = parameters["BRANCHES_TO_OPEN"],
         data_tree_name = "data",
         open_MC = flags.save_MC,
@@ -158,8 +181,6 @@ def main():
     )
 
     # Removing events with no reconstructed particles
-    events_array = events_array[ak.num(events_array["reconstructed"]["pid"], axis=1)>0]
-    print(f"Have {len(events_array)} events after removing empty events")
     events_array = get_eventbuilder_electrons(events_array)
     events_array = get_DIS_quantities(events_array)
 
