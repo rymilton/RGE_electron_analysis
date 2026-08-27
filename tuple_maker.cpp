@@ -12,16 +12,6 @@
 #include <thread>
 #include <ROOT/TProcessExecutor.hxx>
 
-/*
-    My whole workflow is getting tedious with all the scripts that I have to run.
-    I should add the following to this script:
-    - Only keep events with a trigger electron -- done
-    - Calculate the DIS quantities for each event and save them in an event tree -- done
-    - Save the particles in a separated tree -- done
-    - Do the same for MC -- done
-    - Switch to RNTuple
-    - Add multiprocessing if given a whole directory of files, but also allow for a single file to be processed
-*/
 
 std::tuple<double, double, double, double, double> calculate_DIS_quantities(double elec_px, double elec_py, double elec_pz)
 {
@@ -98,6 +88,17 @@ void process_single_file(
     TTreeReaderArray<float> trajectory_z_branch(reader,             "REC::Traj::z");
     TTreeReaderArray<float> trajectory_edge_branch(reader,          "REC::Traj::edge");
 
+    TTreeReaderArray<short> ftrack_pindex_branch(reader,         "REC::FTrack::pindex");
+    TTreeReaderArray<int> ftrack_sector_branch(reader,           "REC::FTrack::sector");
+    TTreeReaderArray<short> ftrack_status_branch(reader,         "REC::FTrack::status");
+    TTreeReaderArray<float> ftrack_chi2_branch(reader,           "REC::FTrack::chi2");
+    TTreeReaderArray<float> ftrack_px_branch(reader,             "REC::FTrack::px");
+    TTreeReaderArray<float> ftrack_py_branch(reader,             "REC::FTrack::py");
+    TTreeReaderArray<float> ftrack_pz_branch(reader,             "REC::FTrack::pz");
+    TTreeReaderArray<float> ftrack_vx_branch(reader,             "REC::FTrack::vx");
+    TTreeReaderArray<float> ftrack_vy_branch(reader,             "REC::FTrack::vy");
+    TTreeReaderArray<float> ftrack_vz_branch(reader,             "REC::FTrack::vz");
+
     // TTreeReaderArray<float> fcupgated_branch(reader, "RUN::scaler::fcupgated");
 
     // TTreeReaderArray<int> run_number_branch(reader,   "RUN::config::run");
@@ -116,6 +117,11 @@ void process_single_file(
     std::vector<int> charge, pid, status;
     std::vector<int> track_charge, sector, track_ndf;
     std::vector<double> track_chi2;
+
+    // FMT Track information
+    std::vector<double> ftrack_px, ftrack_py, ftrack_pz, ftrack_vx, ftrack_vy, ftrack_vz, ftrack_chi2;
+    std::vector<int> ftrack_sector, ftrack_status;
+
     
     // Detector info for each particle
     std::vector<double> E_PCAL, E_ECIN, E_ECOUT;
@@ -156,6 +162,16 @@ void process_single_file(
     outTree_reconstructed->Branch("sector", &sector);
     outTree_reconstructed->Branch("NDF", &track_ndf);
     outTree_reconstructed->Branch("chi2", &track_chi2);
+
+    outTree_reconstructed->Branch("ftrack_px", &ftrack_px);
+    outTree_reconstructed->Branch("ftrack_py", &ftrack_py);
+    outTree_reconstructed->Branch("ftrack_pz", &ftrack_pz);
+    outTree_reconstructed->Branch("ftrack_vx", &ftrack_vx);
+    outTree_reconstructed->Branch("ftrack_vy", &ftrack_vy);
+    outTree_reconstructed->Branch("ftrack_vz", &ftrack_vz);
+    outTree_reconstructed->Branch("ftrack_chi2", &ftrack_chi2);
+    outTree_reconstructed->Branch("ftrack_sector", &ftrack_sector);
+    outTree_reconstructed->Branch("ftrack_status", &ftrack_status);
 
     outTree_reconstructed->Branch("E_PCAL", &E_PCAL);
     outTree_reconstructed->Branch("E_ECIN", &E_ECIN);
@@ -206,6 +222,9 @@ void process_single_file(
         charge.clear(); pid.clear(); status.clear();
         vt.clear(); vx.clear(); vy.clear(); vz.clear(); theta.clear(); phi.clear();
         track_charge.clear(); sector.clear(); track_ndf.clear(); track_chi2.clear();
+        ftrack_px.clear(); ftrack_py.clear(); ftrack_pz.clear();
+        ftrack_vx.clear(); ftrack_vy.clear(); ftrack_vz.clear();
+        ftrack_chi2.clear(); ftrack_sector.clear(); ftrack_status.clear();
         E_PCAL.clear(); E_ECIN.clear(); E_ECOUT.clear();
         PCAL_U.clear(); PCAL_V.clear(); PCAL_W.clear();
         Nphe_HTCC.clear(); Nphe_LTCC.clear();
@@ -297,6 +316,43 @@ void process_single_file(
             theta.push_back(std::atan2(std::sqrt(px_i*px_i + py_i*py_i), pz_i));
             phi.push_back(std::atan2(py_i, px_i));
 
+            // FMT Track info
+            // NOTE: only one FTrack entry is expected per particle. If more than one
+            // is ever found, we keep the first and warn, rather than pushing extra
+            // entries that would desync this vector from the other per-track branches.
+            bool has_ftrack = false;
+            for (std::size_t j = 0; j < ftrack_pindex_branch.GetSize(); j++) {
+                if ((int)ftrack_pindex_branch[j] != particle_i) continue;
+
+                if (has_ftrack) {
+                    std::cerr << "Warning: multiple REC::FTrack entries found for particle "
+                               << particle_i << " in event " << counter
+                               << "; keeping the first and ignoring the rest." << std::endl;
+                    break;
+                }
+                has_ftrack = true;
+
+                ftrack_px.push_back(ftrack_px_branch[j]);
+                ftrack_py.push_back(ftrack_py_branch[j]);
+                ftrack_pz.push_back(ftrack_pz_branch[j]);
+                ftrack_vx.push_back(ftrack_vx_branch[j]);
+                ftrack_vy.push_back(ftrack_vy_branch[j]);
+                ftrack_vz.push_back(ftrack_vz_branch[j]);
+                ftrack_chi2.push_back(ftrack_chi2_branch[j]);
+                ftrack_sector.push_back((int)ftrack_sector_branch[j]);
+                ftrack_status.push_back((int)ftrack_status_branch[j]);
+            }
+            if (!has_ftrack) {
+                ftrack_px.push_back(-9999);
+                ftrack_py.push_back(-9999);
+                ftrack_pz.push_back(-9999);
+                ftrack_vx.push_back(-9999);
+                ftrack_vy.push_back(-9999);
+                ftrack_vz.push_back(-9999);
+                ftrack_chi2.push_back(-9999);
+                ftrack_sector.push_back(-9999);
+                ftrack_status.push_back(-9999);
+            }
 
             // Reset calorimeter sums
             double E_PCAL_sum = 0;
@@ -360,12 +416,14 @@ void process_single_file(
             double DC_region1_z_particle = 0;
             double DC_region1_edge_particle = 0;
             bool hits_region1 = false;
+            int nhits_region1 = 0;
 
             double DC_region2_x_particle = 0;
             double DC_region2_y_particle = 0;
             double DC_region2_z_particle = 0;
             double DC_region2_edge_particle = 0;
             bool hits_region2 = false;
+            int nhits_region2 = 0;
 
 
             double DC_region3_x_particle = 0;
@@ -373,6 +431,7 @@ void process_single_file(
             double DC_region3_z_particle = 0;
             double DC_region3_edge_particle = 0;
             bool hits_region3 = false;
+            int nhits_region3 = 0;
 
             // Trajectory info (DC)
             for (std::size_t j = 0; j < trajectory_pindex_branch.GetSize(); j++) {
@@ -388,19 +447,44 @@ void process_single_file(
                     DC_region1_z_particle += trajectory_z_branch[j];
                     DC_region1_edge_particle += trajectory_edge_branch[j];
                     hits_region1 = true;
+                    nhits_region1++;
                 } else if (layer == 18) { // Region 2
                     DC_region2_x_particle += trajectory_x_branch[j];
                     DC_region2_y_particle += trajectory_y_branch[j];
                     DC_region2_z_particle += trajectory_z_branch[j];
                     DC_region2_edge_particle += trajectory_edge_branch[j];
                     hits_region2 = true;
+                    nhits_region2++;
                 } else if (layer == 36) { // Region 3
                     DC_region3_x_particle += trajectory_x_branch[j];
                     DC_region3_y_particle += trajectory_y_branch[j];
                     DC_region3_z_particle += trajectory_z_branch[j];
                     DC_region3_edge_particle += trajectory_edge_branch[j];
                     hits_region3 = true;
+                    nhits_region3++;
                 }
+            }
+
+            // These regions are expected to have at most one DC trajectory hit
+            // per particle. If there's more than one, the values above are a sum
+            // of multiple distinct hit positions, not a real corrected position.
+            if (nhits_region1 > 1) {
+                std::cerr << "Warning: " << nhits_region1 << " DC region 1 trajectory hits found for particle "
+                           << particle_i << " in event " << counter
+                           << "; DC_region1_x/y/z/edge is a sum over all of them, not a single hit position."
+                           << std::endl;
+            }
+            if (nhits_region2 > 1) {
+                std::cerr << "Warning: " << nhits_region2 << " DC region 2 trajectory hits found for particle "
+                           << particle_i << " in event " << counter
+                           << "; DC_region2_x/y/z/edge is a sum over all of them, not a single hit position."
+                           << std::endl;
+            }
+            if (nhits_region3 > 1) {
+                std::cerr << "Warning: " << nhits_region3 << " DC region 3 trajectory hits found for particle "
+                           << particle_i << " in event " << counter
+                           << "; DC_region3_x/y/z/edge is a sum over all of them, not a single hit position."
+                           << std::endl;
             }
 
             if (!hits_region1) {
@@ -444,6 +528,7 @@ void process_single_file(
             double PCAL_z_particle = 0;
             double PCAL_edge_particle = 0;
             bool hits_PCAL = false;
+            int nhits_PCAL = 0;
 
             for (std::size_t j = 0; j < trajectory_pindex_branch.GetSize(); j++) {
                 if ((int)trajectory_pindex_branch[j] != particle_i) continue;
@@ -457,6 +542,15 @@ void process_single_file(
                 PCAL_z_particle += trajectory_z_branch[j];
                 PCAL_edge_particle += trajectory_edge_branch[j];
                 hits_PCAL = true;
+                nhits_PCAL++;
+            }
+            // Expected at most one PCAL trajectory hit per particle. More than one
+            // means the values above sum multiple distinct hit positions.
+            if (nhits_PCAL > 1) {
+                std::cerr << "Warning: " << nhits_PCAL << " PCAL trajectory hits found for particle "
+                           << particle_i << " in event " << counter
+                           << "; PCAL_x/y/z/edge is a sum over all of them, not a single hit position."
+                           << std::endl;
             }
             if (hits_PCAL) {
                 PCAL_x.push_back(PCAL_x_particle);
@@ -506,6 +600,9 @@ void process_single_file(
         {   
             gen_pid.clear(); gen_px.clear(); gen_py.clear(); gen_pz.clear();
             gen_vx.clear(); gen_vy.clear(); gen_vz.clear(); gen_vt.clear();
+            // Reset DIS scalars each event so events with no generated electron
+            // don't silently inherit the previous event's values.
+            gen_Q2 = -9999; gen_nu = -9999; gen_x = -9999; gen_y = -9999; gen_W = -9999;
             int num_gen_parts = gen_pid_branch.GetSize();
             bool calculated_gen_DIS = false;
             for (int i = 0; i < num_gen_parts; i++)
