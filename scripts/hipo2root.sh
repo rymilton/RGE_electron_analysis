@@ -1,8 +1,18 @@
 #!/bin/bash
-data_directory="/work/clas12/skuditha/skims/phys_val/skim/"
-output_directory="/work/clas12/rmilton/rge_datasets/phys_val/020150/banks/"
+data_directory="/cache/clas12/rg-e/production/spring2024/pass1/torus-1/C_D2/dst/recon/020030/"
+output_directory="/volatile/clas12/rmilton/rge_datasets/testing/"
+save_MC_info="0"
+njobs=16
+
 mkdir -p "${output_directory}"
 
-filename="020150_trigger_e.hipo"
-output_filename="banks_020150_trigger_e.root"
-./hipo2root "${data_directory}" "${filename}" "${output_directory}" "${output_filename}" "0"
+# Collect just the basenames (hipo2root_parallel prepends data_directory itself)
+filenames=()
+count=0
+for filepath in "${data_directory}"*.hipo; do
+    filenames+=("$(basename "${filepath}")")
+    count=$((count + 1))
+done
+
+
+./hipo2root "${data_directory}" "${output_directory}" "${save_MC_info}" "${njobs}" "${filenames[@]}"
