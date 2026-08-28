@@ -10,6 +10,8 @@ BRANCHES_TO_OPEN:
   - v_z
   - theta
   - phi
+  - theta_degrees
+  - phi_degrees
   - sector
   - NDF
   - chi2
@@ -31,6 +33,12 @@ BRANCHES_TO_OPEN:
   - DC_region3_y
   - DC_region3_z
   - DC_region3_edge
+  - has_trigger_electron
+  - Q2
+  - nu
+  - x
+  - y
+  - W
 
 BRANCHES_TO_SAVE:
   - pid
@@ -109,31 +117,39 @@ ELECTRON_SELECTION_BRANCHES_TO_SAVE:
   - W
   - target
 
-MC_BRANCHES_TO_OPEN:
-  - MC_pid
-  - MC_px
-  - MC_py
-  - MC_pz
-  - MC_vx
-  - MC_vy
-  - MC_vz
+GEN_BRANCHES_TO_OPEN:
+  - gen_pid
+  - gen_px
+  - gen_py
+  - gen_pz
+  - gen_vx
+  - gen_vy
+  - gen_vz
+  - gen_p
+  - gen_theta_degrees
+  - gen_phi_degrees
+  - gen_Q2
+  - gen_nu
+  - gen_x
+  - gen_y
+  - gen_W
 
-MC_BRANCHES_TO_SAVE:
-  - MC_pid
-  - MC_px
-  - MC_py
-  - MC_pz
-  - MC_p
-  - MC_vx
-  - MC_vy
-  - MC_vz
-  - MC_theta_degrees
-  - MC_phi_degrees
-  - MC_Q2
-  - MC_nu
-  - MC_x
-  - MC_y
-  - MC_W
+GEN_BRANCHES_TO_SAVE:
+  - gen_pid
+  - gen_px
+  - gen_py
+  - gen_pz
+  - gen_p
+  - gen_vx
+  - gen_vy
+  - gen_vz
+  - gen_theta_degrees
+  - gen_phi_degrees
+  - gen_Q2
+  - gen_nu
+  - gen_x
+  - gen_y
+  - gen_W
 
 ELECTRON_KINEMATIC_CUTS:
   - Q2 > 1
