@@ -45,10 +45,10 @@ def parse_arguments():
         type=str,
     )
     parser.add_argument(
-        "--save_MC",
+        "--save_gen",
         action="store_true",
         default=False,
-        help="Load Monte Carlo information from file and save it in output electrons",
+        help="Load generator-level (Monte Carlo truth) information from file and save it in output electrons",
     )
     parser.add_argument(
         "--config",
@@ -137,11 +137,11 @@ def main():
         data_paths=input_data,
         branches_to_open=parameters["BRANCHES_TO_SAVE"],
         data_tree_name="reconstructed_electrons",
-        open_MC=flags.save_MC,
-        MC_branches_to_open=(
-            parameters["MC_BRANCHES_TO_SAVE"] if flags.save_MC else None
+        open_gen=flags.save_gen,
+        gen_branches_to_open=(
+            parameters["GEN_BRANCHES_TO_SAVE"] if flags.save_gen else None
         ),
-        MC_tree_name="MC_electrons",
+        gen_tree_name="gen_electrons",
         nmax=flags.nmax,
         log_file=flags.log_file,
     )
@@ -219,8 +219,8 @@ def main():
         flags.output_directory,
         flags.output_file,
         parameters["ELECTRON_SELECTION_BRANCHES_TO_SAVE"],
-        flags.save_MC,
-        parameters["MC_BRANCHES_TO_SAVE"] if flags.save_MC else None,
+        flags.save_gen,
+        parameters["GEN_BRANCHES_TO_SAVE"] if flags.save_gen else None,
     )
 
 
