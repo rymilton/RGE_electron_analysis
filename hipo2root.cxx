@@ -33,7 +33,8 @@
 // Number of worker processes used when njobs is not given on the command line.
 static const int kDefaultNJobs = 4;
 
-struct rec_particles_holder {
+struct rec_particles_holder
+{
     std::vector<int> pid;
     std::vector<float> px, py, pz;
     std::vector<float> vx, vy, vz, vt;
@@ -41,10 +42,16 @@ struct rec_particles_holder {
     std::vector<float> beta, chi2pid;
     std::vector<short> status;
 
-    void clear() {
+    void clear()
+    {
         pid.clear();
-        px.clear(); py.clear(); pz.clear();
-        vx.clear(); vy.clear(); vz.clear(); vt.clear();
+        px.clear();
+        py.clear();
+        pz.clear();
+        vx.clear();
+        vy.clear();
+        vz.clear();
+        vt.clear();
         charge.clear();
         beta.clear();
         chi2pid.clear();
@@ -52,111 +59,180 @@ struct rec_particles_holder {
     }
 };
 
-struct rec_traj_holder {
+struct rec_traj_holder
+{
     std::vector<short> pindex, index;
     std::vector<int> detector, layer;
     std::vector<float> x, y, z;
     std::vector<float> cx, cy, cz;
     std::vector<float> path, edge;
 
-    void clear() {
-        pindex.clear(); index.clear();
-        detector.clear(); layer.clear();
-        x.clear(); y.clear(); z.clear();
-        cx.clear(); cy.clear(); cz.clear();
-        path.clear(); edge.clear();
+    void clear()
+    {
+        pindex.clear();
+        index.clear();
+        detector.clear();
+        layer.clear();
+        x.clear();
+        y.clear();
+        z.clear();
+        cx.clear();
+        cy.clear();
+        cz.clear();
+        path.clear();
+        edge.clear();
     }
 };
 
-struct rec_track_holder {
+struct rec_track_holder
+{
     std::vector<short> index, pindex, NDF;
     std::vector<int> q, sector;
     std::vector<float> chi2;
 
-    void clear() {
-        index.clear(); pindex.clear(); NDF.clear(); q.clear(); sector.clear(); chi2.clear();
+    void clear()
+    {
+        index.clear();
+        pindex.clear();
+        NDF.clear();
+        q.clear();
+        sector.clear();
+        chi2.clear();
     }
 };
 
-struct rec_ftrack_holder {
+struct rec_ftrack_holder
+{
     std::vector<short> index, pindex, status, NDF, hbindex;
     std::vector<int> detector, sector, q;
     std::vector<float> chi2, px, py, pz, vx, vy, vz;
 
-    void clear() {
-        index.clear(); pindex.clear(); status.clear(); NDF.clear(); hbindex.clear();
-        detector.clear(); sector.clear(); q.clear();
-        chi2.clear(); px.clear(); py.clear(); pz.clear(); vx.clear(); vy.clear(); vz.clear();
+    void clear()
+    {
+        index.clear();
+        pindex.clear();
+        status.clear();
+        NDF.clear();
+        hbindex.clear();
+        detector.clear();
+        sector.clear();
+        q.clear();
+        chi2.clear();
+        px.clear();
+        py.clear();
+        pz.clear();
+        vx.clear();
+        vy.clear();
+        vz.clear();
     }
 };
 
-struct rec_calorimeter_holder {
+struct rec_calorimeter_holder
+{
     std::vector<short> pindex;
     std::vector<int> layer, sector, detector;
     std::vector<float> energy, time, lu, lv, lw, du, dv, dw;
 
-    void clear() {
-        pindex.clear(); layer.clear(); sector.clear(); detector.clear();
-        energy.clear(); time.clear(); lu.clear(); lv.clear(); lw.clear();
-        du.clear(); dv.clear(); dw.clear();
+    void clear()
+    {
+        pindex.clear();
+        layer.clear();
+        sector.clear();
+        detector.clear();
+        energy.clear();
+        time.clear();
+        lu.clear();
+        lv.clear();
+        lw.clear();
+        du.clear();
+        dv.clear();
+        dw.clear();
     }
 };
 
-struct rec_cherenkov_holder {
+struct rec_cherenkov_holder
+{
     std::vector<short> pindex;
     std::vector<int> detector;
     std::vector<float> nphe;
 
-    void clear() {
-        pindex.clear(); detector.clear(); nphe.clear();
+    void clear()
+    {
+        pindex.clear();
+        detector.clear();
+        nphe.clear();
     }
 };
 
-struct mc_particle_holder {
+struct mc_particle_holder
+{
     std::vector<int> pid;
     std::vector<float> px, py, pz;
     std::vector<float> vx, vy, vz, vt;
 
-    void clear() {
+    void clear()
+    {
         pid.clear();
-        px.clear(); py.clear(); pz.clear();
-        vx.clear(); vy.clear(); vz.clear(); vt.clear();
+        px.clear();
+        py.clear();
+        pz.clear();
+        vx.clear();
+        vy.clear();
+        vz.clear();
+        vt.clear();
     }
 };
 
-struct mc_event_holder {
+struct mc_event_holder
+{
     std::vector<short> npart, atarget, ztarget, ptarget, pbeam, ebeam, weight;
     std::vector<int> btype, targetid, processid;
 
-    void clear() {
-        npart.clear(); atarget.clear(); ztarget.clear(); ptarget.clear(); pbeam.clear();
-        ebeam.clear(); weight.clear(); btype.clear(); targetid.clear(); processid.clear();
+    void clear()
+    {
+        npart.clear();
+        atarget.clear();
+        ztarget.clear();
+        ptarget.clear();
+        pbeam.clear();
+        ebeam.clear();
+        weight.clear();
+        btype.clear();
+        targetid.clear();
+        processid.clear();
     }
 };
 
-struct run_scaler_holder {
+struct run_scaler_holder
+{
     std::vector<float> fcupgated;
 
-    void clear() {
+    void clear()
+    {
         fcupgated.clear();
     }
 };
 
-struct run_config_holder {
+struct run_config_holder
+{
     std::vector<int> run, event;
-    
-    void clear() {
-        run.clear(); event.clear();
+
+    void clear()
+    {
+        run.clear();
+        event.clear();
     }
 };
 
 // Convert one .hipo file into one .root file. Returns false if the file could not be read.
-bool processFile(const TString& inputDir, const TString& inputFile,
-                 const TString& outputDir, const TString& outputFile,
-                 bool saveMC) {
+bool processFile(const TString &inputDir, const TString &inputFile,
+                 const TString &outputDir, const TString &outputFile,
+                 bool saveMC)
+{
 
     TString inputPath = inputDir + inputFile;
-    if (access(inputPath.Data(), R_OK) != 0) {
+    if (access(inputPath.Data(), R_OK) != 0)
+    {
         std::cerr << "Cannot read input file: " << inputPath << std::endl;
         return false;
     }
@@ -165,7 +241,7 @@ bool processFile(const TString& inputDir, const TString& inputFile,
     std::cout << "Opening file: " << inputPath << std::endl;
     reader.open(inputPath);
 
-    std::cout<< "Reading dictionary..." << std::endl;
+    std::cout << "Reading dictionary..." << std::endl;
     hipo::dictionary factory;
     reader.readDictionary(factory);
 
@@ -180,10 +256,11 @@ bool processFile(const TString& inputDir, const TString& inputFile,
     hipo::bank run_scaler_bank(factory.getSchema("RUN::scaler"));
     hipo::bank run_config_bank(factory.getSchema("RUN::config"));
 
-    std::cout << "Creating output file: " << outputDir+outputFile << std::endl;
-    TFile outfile(outputDir+outputFile, "RECREATE");
-    if (outfile.IsZombie()) {
-        std::cerr << "Cannot create output file: " << outputDir+outputFile << std::endl;
+    std::cout << "Creating output file: " << outputDir + outputFile << std::endl;
+    TFile outfile(outputDir + outputFile, "RECREATE");
+    if (outfile.IsZombie())
+    {
+        std::cerr << "Cannot create output file: " << outputDir + outputFile << std::endl;
         return false;
     }
     TTree tree("data", "");
@@ -196,8 +273,7 @@ bool processFile(const TString& inputDir, const TString& inputFile,
     rec_cherenkov_holder recCherenkov;
     mc_particle_holder mcParticles;
     mc_event_holder mcEvents;
-    
-    
+
     run_scaler_holder runScalers;
     run_config_holder runConfigs;
 
@@ -273,7 +349,8 @@ bool processFile(const TString& inputDir, const TString& inputFile,
     tree.Branch("REC::Cherenkov::detector", &recCherenkov.detector);
     tree.Branch("REC::Cherenkov::nphe", &recCherenkov.nphe);
 
-    if (saveMC) {
+    if (saveMC)
+    {
         // MC::Particle branches
         tree.Branch("MC::Particle::pid", &mcParticles.pid);
         tree.Branch("MC::Particle::px", &mcParticles.px);
@@ -308,13 +385,15 @@ bool processFile(const TString& inputDir, const TString& inputFile,
     int counter = 0;
     std::cout << "Processing events..." << std::endl;
     auto startTime = std::chrono::steady_clock::now();
-    while (reader.next() == true) {
-        if (counter % 10000 == 0) {
+    while (reader.next() == true)
+    {
+        if (counter % 10000 == 0)
+        {
             auto now = std::chrono::steady_clock::now();
             double elapsedSec = std::chrono::duration<double>(now - startTime).count();
             double avgMsPerEvent = (counter > 0) ? (elapsedSec / counter) * 1000.0 : 0.0;
             std::cout << "Processed " << counter << " events"
-                       << " (avg " << avgMsPerEvent << " ms/event)" << std::endl;
+                      << " (avg " << avgMsPerEvent << " ms/event)" << std::endl;
         }
         reader.read(event);
 
@@ -341,7 +420,8 @@ bool processFile(const TString& inputDir, const TString& inputFile,
         recParticles.beta.reserve(nrows);
         recParticles.chi2pid.reserve(nrows);
         recParticles.status.reserve(nrows);
-        for (int row = 0; row < nrows; row++) {
+        for (int row = 0; row < nrows; row++)
+        {
             recParticles.pid.push_back(rec_particles_bank.getInt("pid", row));
             recParticles.px.push_back(rec_particles_bank.getFloat("px", row));
             recParticles.py.push_back(rec_particles_bank.getFloat("py", row));
@@ -370,7 +450,8 @@ bool processFile(const TString& inputDir, const TString& inputFile,
         recTraj.cz.reserve(nrows);
         recTraj.path.reserve(nrows);
         recTraj.edge.reserve(nrows);
-        for (int row = 0; row < nrows; row++) {
+        for (int row = 0; row < nrows; row++)
+        {
             recTraj.pindex.push_back(rec_traj_bank.getShort("pindex", row));
             recTraj.index.push_back(rec_traj_bank.getShort("index", row));
             recTraj.detector.push_back(rec_traj_bank.getByte("detector", row));
@@ -384,7 +465,7 @@ bool processFile(const TString& inputDir, const TString& inputFile,
             recTraj.path.push_back(rec_traj_bank.getFloat("path", row));
             recTraj.edge.push_back(rec_traj_bank.getFloat("edge", row));
         }
-        
+
         event.getStructure(rec_track_bank);
         nrows = rec_track_bank.getRows();
         recTrack.index.reserve(nrows);
@@ -393,7 +474,8 @@ bool processFile(const TString& inputDir, const TString& inputFile,
         recTrack.q.reserve(nrows);
         recTrack.sector.reserve(nrows);
         recTrack.chi2.reserve(nrows);
-        for (int row = 0; row < nrows; row++) {
+        for (int row = 0; row < nrows; row++)
+        {
             recTrack.index.push_back(rec_track_bank.getShort("index", row));
             recTrack.pindex.push_back(rec_track_bank.getShort("pindex", row));
             recTrack.NDF.push_back(rec_track_bank.getShort("NDF", row));
@@ -419,7 +501,8 @@ bool processFile(const TString& inputDir, const TString& inputFile,
         recFTrack.vx.reserve(nrows);
         recFTrack.vy.reserve(nrows);
         recFTrack.vz.reserve(nrows);
-        for (int row = 0; row < nrows; row++) {
+        for (int row = 0; row < nrows; row++)
+        {
             recFTrack.index.push_back(rec_ftrack_bank.getShort("index", row));
             recFTrack.pindex.push_back(rec_ftrack_bank.getShort("pindex", row));
             recFTrack.status.push_back(rec_ftrack_bank.getShort("status", row));
@@ -451,7 +534,8 @@ bool processFile(const TString& inputDir, const TString& inputFile,
         recCalorimeter.du.reserve(nrows);
         recCalorimeter.dv.reserve(nrows);
         recCalorimeter.dw.reserve(nrows);
-        for (int row = 0; row < nrows; row++) {
+        for (int row = 0; row < nrows; row++)
+        {
             recCalorimeter.pindex.push_back(rec_calorimeter_bank.getShort("pindex", row));
             recCalorimeter.detector.push_back(rec_calorimeter_bank.getByte("detector", row));
             recCalorimeter.layer.push_back(rec_calorimeter_bank.getByte("layer", row));
@@ -471,7 +555,8 @@ bool processFile(const TString& inputDir, const TString& inputFile,
         recCherenkov.pindex.reserve(nrows);
         recCherenkov.detector.reserve(nrows);
         recCherenkov.nphe.reserve(nrows);
-        for (int row = 0; row < nrows; row++) {
+        for (int row = 0; row < nrows; row++)
+        {
             recCherenkov.pindex.push_back(rec_cherenkov_bank.getShort("pindex", row));
             recCherenkov.detector.push_back(rec_cherenkov_bank.getByte("detector", row));
             recCherenkov.nphe.push_back(rec_cherenkov_bank.getFloat("nphe", row));
@@ -480,7 +565,8 @@ bool processFile(const TString& inputDir, const TString& inputFile,
         event.getStructure(run_scaler_bank);
         nrows = run_scaler_bank.getRows();
         runScalers.fcupgated.reserve(nrows);
-        for (int row = 0; row < nrows; row++) {
+        for (int row = 0; row < nrows; row++)
+        {
             runScalers.fcupgated.push_back(run_scaler_bank.getFloat("fcupgated", row));
         }
 
@@ -488,12 +574,14 @@ bool processFile(const TString& inputDir, const TString& inputFile,
         nrows = run_config_bank.getRows();
         runConfigs.run.reserve(nrows);
         runConfigs.event.reserve(nrows);
-        for (int row = 0; row < nrows; row++) {
+        for (int row = 0; row < nrows; row++)
+        {
             runConfigs.run.push_back(run_config_bank.getInt("run", row));
             runConfigs.event.push_back(run_config_bank.getInt("event", row));
         }
-        
-        if (saveMC) {
+
+        if (saveMC)
+        {
             mcParticles.clear();
             mcEvents.clear();
             event.getStructure(mc_particle_bank);
@@ -506,7 +594,8 @@ bool processFile(const TString& inputDir, const TString& inputFile,
             mcParticles.vy.reserve(nrows);
             mcParticles.vz.reserve(nrows);
             mcParticles.vt.reserve(nrows);
-            for (int row = 0; row < nrows; row++) {
+            for (int row = 0; row < nrows; row++)
+            {
                 mcParticles.pid.push_back(mc_particle_bank.getInt("pid", row));
                 mcParticles.px.push_back(mc_particle_bank.getFloat("px", row));
                 mcParticles.py.push_back(mc_particle_bank.getFloat("py", row));
@@ -529,7 +618,8 @@ bool processFile(const TString& inputDir, const TString& inputFile,
             mcEvents.btype.reserve(nrows);
             mcEvents.targetid.reserve(nrows);
             mcEvents.processid.reserve(nrows);
-            for (int row = 0; row < nrows; row++) {
+            for (int row = 0; row < nrows; row++)
+            {
                 mcEvents.npart.push_back(mc_event_bank.getShort("npart", row));
                 mcEvents.atarget.push_back(mc_event_bank.getShort("atarget", row));
                 mcEvents.ztarget.push_back(mc_event_bank.getShort("ztarget", row));
@@ -555,50 +645,61 @@ bool processFile(const TString& inputDir, const TString& inputFile,
 }
 
 // Derive "name.root" from "name.hipo"
-std::string deriveOutputName(const std::string& hipoName) {
+std::string deriveOutputName(const std::string &hipoName)
+{
     std::string out = hipoName;
     const std::string suffix = ".hipo";
     if (out.size() >= suffix.size() &&
-        out.compare(out.size() - suffix.size(), suffix.size(), suffix) == 0) {
+        out.compare(out.size() - suffix.size(), suffix.size(), suffix) == 0)
+    {
         out = out.substr(0, out.size() - suffix.size());
     }
     return out + ".root";
 }
 
-bool isInteger(const std::string& s) {
-    if (s.empty()) return false;
-    for (char c : s) {
-        if (!std::isdigit(static_cast<unsigned char>(c))) return false;
+bool isInteger(const std::string &s)
+{
+    if (s.empty())
+        return false;
+    for (char c : s)
+    {
+        if (!std::isdigit(static_cast<unsigned char>(c)))
+            return false;
     }
     return true;
 }
 
 // Adding / to end of directory if missing
-TString withTrailingSlash(const char* dir) {
+TString withTrailingSlash(const char *dir)
+{
     std::string d(dir);
-    if (!d.empty() && d.back() != '/') d += '/';
+    if (!d.empty() && d.back() != '/')
+        d += '/';
     return TString(d.c_str());
 }
 
-int main(int argc, char** argv) {
+int main(int argc, char **argv)
+{
 
-    if (argc < 5) {
+    if (argc < 5)
+    {
         std::cerr << "Usage: " << argv[0]
-                   << " input_directory output_directory save_MC(0 or 1) [njobs] file1.hipo [file2.hipo ...]"
-                   << std::endl;
+                  << " input_directory output_directory save_MC(0 or 1) [njobs] file1.hipo [file2.hipo ...]"
+                  << std::endl;
         std::cerr << "  Files are converted in parallel across njobs forked workers"
-                   << " (default " << kDefaultNJobs << ")." << std::endl;
+                  << " (default " << kDefaultNJobs << ")." << std::endl;
         std::cerr << "  Each fileN.hipo is written to output_directory as fileN.root."
-                   << std::endl;
+                  << std::endl;
         return 1;
     }
 
-    TString inputDir  = withTrailingSlash(argv[1]);
+    TString inputDir = withTrailingSlash(argv[1]);
     TString outputDir = withTrailingSlash(argv[2]);
 
     // Checking if saveMCArg is 0 or 1
     const std::string saveMCArg = argv[3];
-    if (saveMCArg != "0" && saveMCArg != "1") {
+    if (saveMCArg != "0" && saveMCArg != "1")
+    {
         std::cerr << "save_MC must be 0 or 1, got: \"" << saveMCArg << "\"" << std::endl;
         return 1;
     }
@@ -607,17 +708,20 @@ int main(int argc, char** argv) {
     // njobs is either the 4th argument passed by user or defaults to kDefaultNJobs
     int njobs = kDefaultNJobs;
     int firstFileArg = 4;
-    if (isInteger(argv[4])) {
+    if (isInteger(argv[4]))
+    {
         njobs = std::stoi(argv[4]);
         firstFileArg = 5;
     }
 
     std::vector<std::string> inputFiles;
-    for (int i = firstFileArg; i < argc; i++) {
+    for (int i = firstFileArg; i < argc; i++)
+    {
         inputFiles.push_back(argv[i]);
     }
 
-    if (inputFiles.empty()) {
+    if (inputFiles.empty())
+    {
         std::cerr << "No input files given." << std::endl;
         return 1;
     }
@@ -628,11 +732,14 @@ int main(int argc, char** argv) {
               << njobs << " worker(s)." << std::endl;
 
     // A single worker does the work in this process, no fork needed.
-    if (njobs == 1) {
+    if (njobs == 1)
+    {
         bool anyFailed = false;
-        for (const auto& fname : inputFiles) {
+        for (const auto &fname : inputFiles)
+        {
             if (!processFile(inputDir, TString(fname), outputDir,
-                             TString(deriveOutputName(fname)), saveMC)) {
+                             TString(deriveOutputName(fname)), saveMC))
+            {
                 anyFailed = true;
             }
         }
@@ -643,24 +750,31 @@ int main(int argc, char** argv) {
     // the next unprocessed file as it frees up, so one slow file cannot stall the rest.
     ROOT::TProcessExecutor pool(njobs);
     std::vector<int> results = pool.Map(
-        [inputDir, outputDir, saveMC](const std::string& fname) {
+        [inputDir, outputDir, saveMC](const std::string &fname)
+        {
             return processFile(inputDir, TString(fname.c_str()), outputDir,
-                               TString(deriveOutputName(fname).c_str()), saveMC) ? 0 : 1;
+                               TString(deriveOutputName(fname).c_str()), saveMC)
+                       ? 0
+                       : 1;
         },
         inputFiles);
 
     // Results come back in input order, so results[i] belongs to inputFiles[i].
     std::vector<std::string> failedFiles;
-    for (size_t i = 0; i < results.size(); i++) {
-        if (results[i] != 0) failedFiles.push_back(inputFiles[i]);
+    for (size_t i = 0; i < results.size(); i++)
+    {
+        if (results[i] != 0)
+            failedFiles.push_back(inputFiles[i]);
     }
 
     std::cout << "All workers finished." << std::endl;
 
-    if (!failedFiles.empty()) {
+    if (!failedFiles.empty())
+    {
         std::cerr << failedFiles.size() << " of " << inputFiles.size()
                   << " file(s) failed to convert:" << std::endl;
-        for (const auto& fname : failedFiles) {
+        for (const auto &fname : failedFiles)
+        {
             std::cerr << "  " << fname << std::endl;
         }
         return 1;
