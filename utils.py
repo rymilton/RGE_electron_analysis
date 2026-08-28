@@ -21,17 +21,17 @@ def open_data(
     data_paths,
     branches_to_open,
     data_tree_name="data",
-    open_MC=False,
-    MC_branches_to_open=None,
-    MC_tree_name="MC",
+    open_gen=False,
+    gen_branches_to_open=None,
+    gen_tree_name="gen",
     nmax=None,
     output_format="awkward",  # Either dictionary or awkward
     log_file=None,
     get_meta_info=False,
 ):
     event_dictionary = {"reconstructed": ak.Array([])}
-    if open_MC:
-        event_dictionary["MC"] = ak.Array([])
+    if open_gen:
+        event_dictionary["gen"] = ak.Array([])
     if get_meta_info:
         event_dictionary["meta_info"] = ak.Array([])
     if log_file is not None:
@@ -77,18 +77,18 @@ def open_data(
                             file.arrays(filter_name=branches_to_open, library="ak"),
                         )
                     )
-        if open_MC:
-            with uproot.open(data_path + f":{MC_tree_name}") as file:
-                print("Opening MC data")
+        if open_gen:
+            with uproot.open(data_path + f":{gen_tree_name}") as file:
+                print("Opening gen data")
                 if log_file is not None:
                     with open(log_file, "a") as f:
-                        f.write(f"Opening MC data from {data_path}\n")
+                        f.write(f"Opening gen data from {data_path}\n")
                 if nmax is not None:
-                    event_dictionary["MC"] = ak.concatenate(
+                    event_dictionary["gen"] = ak.concatenate(
                         (
-                            event_dictionary["MC"],
+                            event_dictionary["gen"],
                             file.arrays(
-                                filter_name=MC_branches_to_open,
+                                filter_name=gen_branches_to_open,
                                 entry_start=0,
                                 entry_stop=remaining_events,
                                 library="ak",
@@ -96,13 +96,13 @@ def open_data(
                         )
                     )
                     print(
-                        f"{nmax-(remaining_events - num_events_in_file)}/{nmax} MC events loaded"
+                        f"{nmax-(remaining_events - num_events_in_file)}/{nmax} gen events loaded"
                     )
                 else:
-                    event_dictionary["MC"] = ak.concatenate(
+                    event_dictionary["gen"] = ak.concatenate(
                         (
-                            event_dictionary["MC"],
-                            file.arrays(filter_name=MC_branches_to_open, library="ak"),
+                            event_dictionary["gen"],
+                            file.arrays(filter_name=gen_branches_to_open, library="ak"),
                         )
                     )
         if get_meta_info:
@@ -166,8 +166,8 @@ def save_output(
     output_directory,
     output_file,
     branches_to_save,
-    save_MC=False,
-    MC_branches_to_save=None,
+    save_gen=False,
+    gen_branches_to_save=None,
     log_file=None,
 ):
     reconstructed_dictionary = {}
@@ -205,21 +205,21 @@ def save_output(
         meta["total_num_events"] = events["total_num_events"]
     if "luminosity_after_cuts" in events.fields:
         meta["luminosity_after_cuts"] = events["luminosity_after_cuts"]
-    if save_MC:
-        print("Saving MC electrons")
+    if save_gen:
+        print("Saving gen electrons")
         if log_file is not None:
             with open(log_file, "a") as f:
-                f.write("Saving MC electrons\n")
-        MC_dictionary = {}
-        MC_fields = events["MC"].fields
-        for field in MC_branches_to_save:
-            if field not in MC_fields:
-                print(f"{field} not in MC particles. Skipping")
+                f.write("Saving gen electrons\n")
+        gen_dictionary = {}
+        gen_fields = events["gen"].fields
+        for field in gen_branches_to_save:
+            if field not in gen_fields:
+                print(f"{field} not in gen particles. Skipping")
                 if log_file is not None:
                     with open(log_file, "a") as f:
-                        f.write(f"{field} not in MC particles. Skipping\n")
+                        f.write(f"{field} not in gen particles. Skipping\n")
                 continue
-            MC_dictionary[field] = events["MC"][field]
+            gen_dictionary[field] = events["gen"][field]
 
     os.makedirs(output_directory, exist_ok=True)
     full_output_path = os.path.join(output_directory, output_file)
@@ -228,5 +228,5 @@ def save_output(
         file["reconstructed_electrons"] = reconstructed_dictionary
         if meta:
             file["meta_info"] = meta
-        if save_MC:
-            file["MC_electrons"] = MC_dictionary
+        if save_gen:
+            file["gen_electrons"] = gen_dictionary
