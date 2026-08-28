@@ -146,14 +146,6 @@ def main():
         log_file=flags.log_file,
     )
     num_EB_electrons = len(events_array)
-    # Apply DIS cuts and other basic cuts
-    events_array = apply_kinematic_cuts(
-        events_array,
-        parameters["ELECTRON_KINEMATIC_CUTS"],
-        log_file=flags.log_file,
-        number_of_initial_electrons=num_EB_electrons,
-    )
-    # Apply fiducial cuts
     if flags.save_plots:
         os.makedirs(flags.plots_directory, exist_ok=True)
         plot_names = parameters.get("PLOT_TITLES", {})
@@ -163,6 +155,17 @@ def main():
             )
     else:
         plot_title = None
+    # Apply DIS cuts and other basic cuts
+    events_array = apply_kinematic_cuts(
+        events_array,
+        parameters["ELECTRON_KINEMATIC_CUTS"],
+        save_plots=flags.save_plots,
+        plots_directory=flags.plots_directory,
+        plot_title=plot_title,
+        log_file=flags.log_file,
+        number_of_initial_electrons=num_EB_electrons,
+    )
+    # Apply fiducial cuts
     events_array = apply_fiducial_cuts(
         events=events_array,
         fiducial_cuts=parameters["ELECTRON_FIDUCIAL_CUTS"],

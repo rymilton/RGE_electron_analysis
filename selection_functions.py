@@ -20,16 +20,64 @@ array_operator_dict = {
 num_sectors = 6
 
 # Applying kinematic cuts to each electron based on ELECTRON_KINEMATIC_CUTS in the config file
-def apply_kinematic_cuts(events, kinematic_cuts, log_file = None, number_of_initial_electrons = None):
+def apply_kinematic_cuts(events, kinematic_cuts, save_plots = True, plots_directory = None, plot_title = None, log_file = None, number_of_initial_electrons = None):
     mask = np.ones(len(events), dtype=bool)
+    y_cut_value, W_cut_value = None, None
     for cut in kinematic_cuts:
         variable_name, operation, cut_value = cut.split()
         if operation not in array_operator_dict:
             raise ValueError(f"Unsupported operation: {operation}")
-        
+
         mask = (mask) & (array_operator_dict[operation](events["reconstructed"][variable_name], float(cut_value)))
+        if variable_name == "y":
+            y_cut_value = float(cut_value)
+        elif variable_name == "W":
+            W_cut_value = float(cut_value)
     events["pass_reco"] = mask
+    events["pass_kinematic"] = mask
     print(f"Have {ak.sum(events['pass_reco'])} events after kinematic cuts")
+    if save_plots:
+        # DIS kinematic boundaries in x-Q2 space, drawn from this call's own
+        # y/W cut values so the plotted lines always match what was applied.
+        M_p = 0.93827  # GeV
+        beam_energy = 10.547  # GeV -- RG-E beam energy
+        s = M_p**2 + 2 * M_p * beam_energy  # GeV^2, massless-electron approx
+
+        x_line = np.linspace(1e-3, 1, 500)
+
+        # y = Q^2 / (x*(s - M_p^2))  ->  Q^2(x) = y * (s - M_p^2) * x
+        Q2_y_cut = y_cut_value * (s - M_p**2) * x_line
+
+        # W^2 = M_p^2 + Q^2*(1-x)/x  ->  Q^2(x) = (W^2 - M_p^2) * x/(1-x)
+        Q2_W_cut = (W_cut_value**2 - M_p**2) * x_line / (1 - x_line)
+
+        x_bins = np.linspace(0, 1, num=50+1)
+        Q2_bins = np.logspace(np.log10(1), np.log10(11), num=45+1, base=10.0)
+        x_bins_fine = np.linspace(0, 1, num=200+1)
+        Q2_bins_fine = np.logspace(np.log10(1), np.log10(11), num=200+1, base=10.0)
+
+        def plot_x_Q2(x, Q2, bins, file_name, draw_cut_lines):
+            fig = plt.figure(figsize=(12, 8))
+            plt.hist2d(np.array(x), np.array(Q2), bins=bins, norm=colors.LogNorm())
+            if draw_cut_lines:
+                plt.plot(x_line, Q2_y_cut, color='red', linestyle='--', linewidth=1.5, label=f"$y={y_cut_value}$")
+                plt.plot(x_line, Q2_W_cut, color='cyan', linestyle='--', linewidth=1.5, label=f"$W={W_cut_value}$ GeV")
+                plt.legend(loc='upper left')
+            plt.xlabel("x")
+            plt.ylabel("$Q^2~(GeV^2)$")
+            plt.colorbar()
+            if plot_title is not None:
+                plt.title(plot_title)
+            plt.xlim(0, 1)
+            plt.ylim(1, 11)
+            if plots_directory is not None:
+                plt.savefig(plots_directory+file_name)
+            plt.close()
+
+        plot_x_Q2(events["reconstructed"]["x"], events["reconstructed"]["Q2"], (x_bins, Q2_bins), "x_Q2_before_cuts.png", draw_cut_lines=True)
+        plot_x_Q2(events["reconstructed"]["x"], events["reconstructed"]["Q2"], (x_bins, Q2_bins), "x_Q2_before_cuts_nocutlines.png", draw_cut_lines=False)
+        plot_x_Q2(events["reconstructed"]["x"][mask], events["reconstructed"]["Q2"][mask], (x_bins_fine, Q2_bins_fine), "x_Q2_after_cuts_finebinning.png", draw_cut_lines=True)
+        plot_x_Q2(events["reconstructed"]["x"][mask], events["reconstructed"]["Q2"][mask], (x_bins, Q2_bins), "x_Q2_after_cuts.png", draw_cut_lines=True)
     if log_file is not None:
         with open(log_file, "a") as f:
             f.write(f"Have {ak.sum(events['pass_reco'])} events after kinematic cuts\n")
