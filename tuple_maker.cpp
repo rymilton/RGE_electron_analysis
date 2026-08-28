@@ -4,6 +4,7 @@
 #include <TTreeReaderArray.h>
 #include <TTreeReaderValue.h>
 #include <TString.h>
+#include <TMath.h>
 #include <iostream>
 #include <cmath> // for std::sqrt, std::atan2
 #include <vector>
@@ -33,7 +34,7 @@ void process_single_file(
     TString input_file,
     TString output_dir,
     TString output_file,
-    Bool_t save_MC
+    Bool_t save_gen
 )
 {
     if (!input_dir.EndsWith("/")) input_dir += "/";
@@ -99,21 +100,29 @@ void process_single_file(
     TTreeReaderArray<float> ftrack_vy_branch(reader,             "REC::FTrack::vy");
     TTreeReaderArray<float> ftrack_vz_branch(reader,             "REC::FTrack::vz");
 
-    // TTreeReaderArray<float> fcupgated_branch(reader, "RUN::scaler::fcupgated");
-
-    // TTreeReaderArray<int> run_number_branch(reader,   "RUN::config::run");
-    // TTreeReaderArray<int> event_number_branch(reader, "RUN::config::event");
+    // RUN::scaler/RUN::config banks aren't present for simulated input, so these are only read for real data.
+    TTreeReaderArray<float>* fcupgated_branch = nullptr;
+    TTreeReaderArray<int>* run_number_branch = nullptr;
+    TTreeReaderArray<int>* event_number_branch = nullptr;
+    if (!save_gen) {
+        fcupgated_branch = new TTreeReaderArray<float>(reader, "RUN::scaler::fcupgated");
+        run_number_branch = new TTreeReaderArray<int>(reader, "RUN::config::run");
+        event_number_branch = new TTreeReaderArray<int>(reader, "RUN::config::event");
+    }
 
 
     std::cout << "Will save output to " << output_file << std::endl;
     TFile* outFile = TFile::Open(output_file, "RECREATE");
     TTree* outTree_reconstructed = new TTree("reconstructed", "Reconstructed particles and event quantities");
-    // TTree *outTree_meta = new TTree("meta", "Event level info");
+    TTree* outTree_meta = nullptr;
+    if (!save_gen) {
+        outTree_meta = new TTree("meta", "Event level info");
+    }
     TTree* outTree_gen = new TTree("gen", "Gen-level particles and event quantities");
 
     // Output branches: A vector of particles for each event
     // Kinematic and track quantities for each particle
-    std::vector<double> beta, chi2pid, px, py, pz, p, vt, vx, vy, vz, theta, phi;
+    std::vector<double> beta, chi2pid, px, py, pz, p, vt, vx, vy, vz, theta, phi, theta_degrees, phi_degrees;
     std::vector<int> charge, pid, status;
     std::vector<int> track_charge, sector, track_ndf;
     std::vector<double> track_chi2;
@@ -134,12 +143,14 @@ void process_single_file(
 
     // Event-level DIS quantities
     double Q2, nu, x, y, W;
+    bool has_trigger_electron;
 
     double fcupgated;
     int run_number, event_number, num_tracks;
 
     std::vector<int> gen_pid;
     std::vector<double> gen_px, gen_py, gen_pz, gen_vx, gen_vy, gen_vz, gen_vt;
+    std::vector<double> gen_p, gen_theta, gen_phi, gen_theta_degrees, gen_phi_degrees;
     double gen_Q2, gen_nu, gen_x, gen_y, gen_W;
 
     outTree_reconstructed->Branch("beta", &beta);
@@ -157,6 +168,8 @@ void process_single_file(
     outTree_reconstructed->Branch("v_z", &vz);
     outTree_reconstructed->Branch("theta", &theta);
     outTree_reconstructed->Branch("phi", &phi);
+    outTree_reconstructed->Branch("theta_degrees", &theta_degrees);
+    outTree_reconstructed->Branch("phi_degrees", &phi_degrees);
 
     outTree_reconstructed->Branch("track_charge", &track_charge);
     outTree_reconstructed->Branch("sector", &sector);
@@ -208,11 +221,14 @@ void process_single_file(
     outTree_reconstructed->Branch("x", &x);
     outTree_reconstructed->Branch("y", &y);
     outTree_reconstructed->Branch("W", &W);
+    outTree_reconstructed->Branch("has_trigger_electron", &has_trigger_electron);
 
-    // outTree_meta->Branch("fcupgated", &fcupgated);
-    // outTree_meta->Branch("run_number", &run_number);
-    // outTree_meta->Branch("event_number", &event_number);
-    // outTree_meta->Branch("num_tracks", &num_tracks);
+    if (!save_gen) {
+        outTree_meta->Branch("fcupgated", &fcupgated);
+        outTree_meta->Branch("run_number", &run_number);
+        outTree_meta->Branch("event_number", &event_number);
+        outTree_meta->Branch("num_tracks", &num_tracks);
+    }
 
     std::cout << "Number of events: " << tree->GetEntries() << std::endl;
     int counter = 0;
@@ -221,6 +237,7 @@ void process_single_file(
         beta.clear(); chi2pid.clear(); px.clear(); py.clear(); pz.clear(); p.clear();
         charge.clear(); pid.clear(); status.clear();
         vt.clear(); vx.clear(); vy.clear(); vz.clear(); theta.clear(); phi.clear();
+        theta_degrees.clear(); phi_degrees.clear();
         track_charge.clear(); sector.clear(); track_ndf.clear(); track_chi2.clear();
         ftrack_px.clear(); ftrack_py.clear(); ftrack_pz.clear();
         ftrack_vx.clear(); ftrack_vy.clear(); ftrack_vz.clear();
@@ -240,44 +257,41 @@ void process_single_file(
 
         num_tracks = track_pindex_branch.GetSize();
         int num_parts = particle_pid_branch.GetSize();
-        // fcupgated = (fcupgated_branch.GetSize()>0) ? fcupgated_branch[0] : -1;
-        // run_number = (int) run_number_branch[0];
-        // event_number = (int) event_number_branch[0];
-        // outTree_meta->Fill();
+        if (!save_gen) {
+            fcupgated = (fcupgated_branch->GetSize()>0) ? (*fcupgated_branch)[0] : -1;
+            run_number = (int) (*run_number_branch)[0];
+            event_number = (int) (*event_number_branch)[0];
+            outTree_meta->Fill();
+        }
 
-        if (num_tracks == 0 || num_parts == 0) continue;
-
-        // First loop over the reconstructed particles to check that there's a reconstructed trigger electron in the event. 
-        // If found, calculate DIS quantities. If not, skip the event.
-        bool has_trigger_electron = false;
+        // First loop over the reconstructed particles to check that there's a reconstructed trigger electron in the event.
+        // If found, calculate DIS quantities. Either way the event is still kept and filled below --
+        // has_trigger_electron tags whether a valid trigger electron was found, rather than dropping the event.
+        has_trigger_electron = false;
+        Q2 = nu = x = y = W = -9999;
         for (int i = 0; i < num_parts; i++) {
             int pid_i = (int) particle_pid_branch[i];
             int status_i = (int) particle_status_branch[i];
             if (pid_i == 11 && status_i<0)
             {
-                has_trigger_electron = true;
                 double px_i = particle_px_branch[i];
                 double py_i = particle_py_branch[i];
                 double pz_i = particle_pz_branch[i];
                 auto [Q2_i, nu_i, x_i, y_i, W2_i] = calculate_DIS_quantities(px_i, py_i, pz_i);
-                if (W2_i < 0)
+                if (W2_i >= 0)
                 {
-                    has_trigger_electron = false; // unphysical W2, likely a bad electron candidate, so skip the event
-                    break;
+                    has_trigger_electron = true;
+                    Q2 = Q2_i;
+                    nu = nu_i;
+                    x = x_i;
+                    y = y_i;
+                    W = std::sqrt(W2_i);
                 }
-
-                Q2 = Q2_i;
-                nu = nu_i;
-                x = x_i;
-                y = y_i;
-                W = std::sqrt(W2_i);
 
                 break; // no need to loop over more particles once we've found the trigger electron
             }
         }
-        if (!has_trigger_electron) continue;
 
-        
         // Loop over each track to fill one entry per track
         for (int i = 0; i < num_tracks; i++) {
 
@@ -315,6 +329,8 @@ void process_single_file(
 
             theta.push_back(std::atan2(std::sqrt(px_i*px_i + py_i*py_i), pz_i));
             phi.push_back(std::atan2(py_i, px_i));
+            theta_degrees.push_back(theta.back() * TMath::RadToDeg());
+            phi_degrees.push_back(phi.back() * TMath::RadToDeg());
 
             // FMT Track info
             // NOTE: only one FTrack entry is expected per particle. If more than one
@@ -568,8 +584,8 @@ void process_single_file(
         } // end loop over tracks
         outTree_reconstructed->Fill();
     }
-    // Saving the MC branches if desired
-    if (save_MC)
+    // Saving the gen branches if desired
+    if (save_gen)
     {
         reader.Restart();
         TTreeReaderArray<int> gen_pid_branch(reader, "MC::Particle::pid");
@@ -589,6 +605,11 @@ void process_single_file(
         outTree_gen->Branch("gen_vy", &gen_vy);
         outTree_gen->Branch("gen_vz", &gen_vz);
         outTree_gen->Branch("gen_vt", &gen_vt);
+        outTree_gen->Branch("gen_p", &gen_p);
+        outTree_gen->Branch("gen_theta", &gen_theta);
+        outTree_gen->Branch("gen_phi", &gen_phi);
+        outTree_gen->Branch("gen_theta_degrees", &gen_theta_degrees);
+        outTree_gen->Branch("gen_phi_degrees", &gen_phi_degrees);
 
         outTree_gen->Branch("gen_Q2", &gen_Q2);
         outTree_gen->Branch("gen_nu", &gen_nu);
@@ -600,6 +621,8 @@ void process_single_file(
         {   
             gen_pid.clear(); gen_px.clear(); gen_py.clear(); gen_pz.clear();
             gen_vx.clear(); gen_vy.clear(); gen_vz.clear(); gen_vt.clear();
+            gen_p.clear(); gen_theta.clear(); gen_phi.clear();
+            gen_theta_degrees.clear(); gen_phi_degrees.clear();
             // Reset DIS scalars each event so events with no generated electron
             // don't silently inherit the previous event's values.
             gen_Q2 = -9999; gen_nu = -9999; gen_x = -9999; gen_y = -9999; gen_W = -9999;
@@ -608,12 +631,13 @@ void process_single_file(
             for (int i = 0; i < num_gen_parts; i++)
             {
                 int gen_pid_i = (int) gen_pid_branch[i];
+                double px_i = gen_px_branch[i];
+                double py_i = gen_py_branch[i];
+                double pz_i = gen_pz_branch[i];
+
                 // Assuming that the first electron found is the scattered electron
                 if (gen_pid_i == 11 && !calculated_gen_DIS) // if it's an electron, calculate the gen-level DIS quantities for the event
                 {
-                    double px_i = gen_px_branch[i];
-                    double py_i = gen_py_branch[i];
-                    double pz_i = gen_pz_branch[i];
                     auto [gen_Q2_i, gen_nu_i, gen_x_i, gen_y_i, gen_W2_i] = calculate_DIS_quantities(px_i, py_i, pz_i);
                     gen_Q2 = gen_Q2_i;
                     gen_nu = gen_nu_i;
@@ -622,14 +646,22 @@ void process_single_file(
                     gen_W = std::sqrt(std::max(0.0, gen_W2_i));
                     calculated_gen_DIS = true; // only calculate DIS quantities for the first electron found in the gen particles list, which should be the trigger electron
                 }
-                gen_pid.push_back((int) gen_pid_branch[i]);
-                gen_px.push_back(gen_px_branch[i]);
-                gen_py.push_back(gen_py_branch[i]);
-                gen_pz.push_back(gen_pz_branch[i]);
+                gen_pid.push_back(gen_pid_i);
+                gen_px.push_back(px_i);
+                gen_py.push_back(py_i);
+                gen_pz.push_back(pz_i);
                 gen_vx.push_back(gen_vx_branch[i]);
                 gen_vy.push_back(gen_vy_branch[i]);
                 gen_vz.push_back(gen_vz_branch[i]);
                 gen_vt.push_back(gen_vt_branch[i]);
+
+                double gen_theta_i = std::atan2(std::sqrt(px_i*px_i + py_i*py_i), pz_i);
+                double gen_phi_i = std::atan2(py_i, px_i);
+                gen_p.push_back(std::sqrt(px_i*px_i + py_i*py_i + pz_i*pz_i));
+                gen_theta.push_back(gen_theta_i);
+                gen_phi.push_back(gen_phi_i);
+                gen_theta_degrees.push_back(gen_theta_i * TMath::RadToDeg());
+                gen_phi_degrees.push_back(gen_phi_i * TMath::RadToDeg());
             }
             outTree_gen->Fill();
         }
@@ -639,8 +671,10 @@ void process_single_file(
     std::cout << "Processed " << counter << " events" << std::endl;
     outFile->cd();
     outTree_reconstructed->Write();
-    // outTree_meta->Write();
-    if (save_MC)
+    if (!save_gen) {
+        outTree_meta->Write();
+    }
+    if (save_gen)
     {
         outTree_gen->Write();
     }
@@ -651,7 +685,7 @@ void process_single_file(
 void tuple_maker(
     TString input_path,
     TString output_dir,
-    Bool_t save_MC,
+    Bool_t save_gen,
     int n_workers = 4
 )
 {
@@ -743,7 +777,7 @@ void tuple_maker(
             file,
             output_dir,
             outname,
-            save_MC
+            save_gen
         );
 
         return;
@@ -755,7 +789,7 @@ void tuple_maker(
         TString file;
         TString output_dir;
         TString output_file;
-        Bool_t save_MC;
+        Bool_t save_gen;
     };
 
     std::cout 
@@ -782,7 +816,7 @@ void tuple_maker(
                 file,
                 output_dir,
                 outname,
-                save_MC
+                save_gen
             }
         );
     }
@@ -797,7 +831,7 @@ void tuple_maker(
                 task.file,
                 task.output_dir,
                 task.output_file,
-                task.save_MC
+                task.save_gen
             );
 
             return 0;
