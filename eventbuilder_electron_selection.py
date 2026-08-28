@@ -1,6 +1,7 @@
 import argparse
 import awkward as ak
 import os
+from concurrent.futures import ProcessPoolExecutor, as_completed
 from utils import LoadYaml, open_data, save_output
 
 def parse_arguments():
@@ -8,8 +9,9 @@ def parse_arguments():
 
     parser.add_argument(
         "--input_file",
-        default="/home/rmilton/work_dir/rge_datasets/job_9586_LD2Csolid_clasdis_deuteron_zh0_3k/ntuples_LD2Csolid_clasdis_deuteron_zh0_3000files.root",
-        help="ROOT file containing tuples from tuple_maker",
+        nargs="+",
+        default=["/home/rmilton/work_dir/rge_datasets/job_9586_LD2Csolid_clasdis_deuteron_zh0_3k/ntuples_LD2Csolid_clasdis_deuteron_zh0_3000files.root"],
+        help="ROOT file(s) containing tuples from tuple_maker",
         type=str,
     )
     parser.add_argument(
@@ -19,10 +21,10 @@ def parse_arguments():
         type=str,
     )
     parser.add_argument(
-        "--output_file",
-        default="electrons_eventbuilder_LD2Csolid_clasdis_deuteron_zh0_3000files.root",
-        help="ROOT file containing tuples from tuple_maker",
-        type=str,
+        "--num_processes",
+        default=4,
+        help="Number of processes to use when processing multiple files in parallel",
+        type=int,
     )
     parser.add_argument(
         "--save_gen",
@@ -124,13 +126,17 @@ def get_gen_electrons(events):
 
     return events
 
-def main():
-    flags = parse_arguments()
+def derive_output_file_name(input_file):
+    stem = os.path.basename(input_file)
+    if stem.endswith(".root"):
+        stem = stem[: -len(".root")]
+    if stem.startswith("ntuples_"):
+        stem = stem[len("ntuples_"):]
+    return f"electrons_eventbuilder_{stem}.root"
 
-    parameters = LoadYaml(os.path.join(flags.config_directory, flags.config))
-
+def single_file_eventbuilder_selection(input_file, flags, parameters):
     events_array = open_data(
-        data_paths = [flags.input_file],
+        data_paths = [input_file],
         branches_to_open = parameters["BRANCHES_TO_OPEN"],
         data_tree_name = "reconstructed",
         open_gen = flags.save_gen,
@@ -146,10 +152,38 @@ def main():
     save_output(
         events_array,
         flags.output_directory,
-        flags.output_file,
+        derive_output_file_name(input_file),
         parameters["BRANCHES_TO_SAVE"],
         flags.save_gen,
         parameters["GEN_BRANCHES_TO_SAVE"] if flags.save_gen else None)
+
+def main():
+    flags = parse_arguments()
+
+    parameters = LoadYaml(os.path.join(flags.config_directory, flags.config))
+
+    njobs = max(1, min(flags.num_processes, len(flags.input_file)))
+
+    if njobs == 1:
+        for input_file in flags.input_file:
+            try:
+                single_file_eventbuilder_selection(input_file, flags, parameters)
+                print(f"Done: {input_file}")
+            except Exception as e:
+                print(f"FAILED: {input_file}: {e}")
+    else:
+        with ProcessPoolExecutor(max_workers=njobs) as executor:
+            futures = {
+                executor.submit(single_file_eventbuilder_selection, input_file, flags, parameters): input_file
+                for input_file in flags.input_file
+            }
+            for future in as_completed(futures):
+                input_file = futures[future]
+                try:
+                    future.result()
+                    print(f"Done: {input_file}")
+                except Exception as e:
+                    print(f"FAILED: {input_file}: {e}")
 
 if __name__ == "__main__":
     main()
