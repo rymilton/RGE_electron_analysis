@@ -8,6 +8,8 @@ import numpy as np
 import awkward as ak
 import pandas as pd
 from scipy.optimize import curve_fit
+import os
+import json
 
 # Converting operator strings to operations on Awkward arrays
 array_operator_dict = {
@@ -519,8 +521,24 @@ def apply_fiducial_cuts(
     return events
 
 
+"""
+Applying a cut on ECIN vs EPCAL.
+Procedure:
+1. In each sector, bin in momentum
+2. In each momentum bin, make slices in SF(ECin) and make a histogram of SF(PCAL). Then fit each with a Gaussian
+3. Take the mean and sigma from each Gaussian fit, and fit mu(SF PCAL)-2.5sigma(SF PCAL) in each SF(ECin) bin with a line
+4. Only keep electrons that are above that line.
+
+This function has a develop and apply mode. In the develop mode, the fits are made and the results are saved to a json.
+In apply mode, the fit parameters are simply read from the json and applied.
+
+"""
+
+
 def apply_partial_sampling_fraction_cut(
     events,
+    develop_cuts=False,
+    cut_params_path=None,
     is_simulation=False,
     save_plots=True,
     plots_directory=None,
@@ -528,143 +546,368 @@ def apply_partial_sampling_fraction_cut(
     log_file=None,
     number_of_initial_electrons=None,
 ):
+    momentum_bin_edges = [0, 2, 3, 4, 5, 6, 7, 8, 9, 12]
 
-    def ecin_epcal_cut(ecin, is_simulation):
-        if is_simulation:
-            return (-0.22 / 0.18) * ecin + 0.22
-        else:
-            return (-0.22 / 0.15) * ecin + 0.22
+    partial_sampling_fraction_directory = None
+    if plots_directory is not None:
+        partial_sampling_fraction_directory = (
+            plots_directory + "/partial_sampling_fraction/"
+        )
+        os.makedirs(partial_sampling_fraction_directory, exist_ok=True)
 
+    if develop_cuts:
+        events_for_fitting = events[events["pass_fiducial"]]
+        all_sector_fits = {}
+
+        for sector in range(num_sectors):
+            sector_cut = events_for_fitting["reconstructed"]["sector"] == (sector + 1)
+            data_in_sector = events_for_fitting["reconstructed"][sector_cut]
+
+            sector_fits = _fit_sector_momentum_bins(
+                data_in_sector,
+                sector + 1,
+                is_simulation,
+                momentum_bin_edges,
+                partial_sampling_fraction_directory,
+                plot_title,
+            )
+            all_sector_fits[str(sector + 1)] = sector_fits
+
+            if log_file is not None:
+                with open(log_file, "a") as f:
+                    f.write(f"\nSector {sector+1} partial SF linear fit parameters:\n")
+                    a_row = f"$a_{{\\text{{sector{sector+1}}}}}$"
+                    b_row = f"$b_{{\\text{{sector{sector+1}}}}}$"
+                    for fit in sector_fits:
+                        a_row += f" & {fit['slope']:.6f}"
+                        b_row += f" & {fit['intercept']:.6f}"
+                    f.write(a_row + " \\\\\n")
+                    f.write(b_row + " \\\\\n")
+
+        cut_params = {
+            "momentum_bin_edges": momentum_bin_edges,
+            "sectors": all_sector_fits,
+        }
+
+        if cut_params_path is not None:
+            with open(cut_params_path, "w") as f:
+                json.dump(cut_params, f, indent=2)
+
+    else:
+        if cut_params_path is None:
+            raise ValueError("cut_params_path is required when develop_cuts=False")
+        with open(cut_params_path, "r") as f:
+            cut_params = json.load(f)
+
+        if partial_sampling_fraction_directory is not None:
+            events_for_plotting = events[events["pass_fiducial"]]
+            for sector_str, sector_fits in cut_params["sectors"].items():
+                sector = int(sector_str)
+                sector_cut = events_for_plotting["reconstructed"]["sector"] == sector
+                data_in_sector = events_for_plotting["reconstructed"][sector_cut]
+                if save_plots:
+                    _plot_sector_summary_from_params(
+                        data_in_sector,
+                        sector,
+                        sector_fits,
+                        partial_sampling_fraction_directory,
+                        plot_title,
+                    )
+
+    return _apply_partial_sf_mask(
+        events, cut_params, log_file, number_of_initial_electrons
+    )
+
+
+def _line_equation(x, m, b):
+    return m * x + b
+
+
+def _fit_sector_momentum_bins(
+    data_in_sector,
+    sector,
+    is_simulation,
+    momentum_bin_edges,
+    plots_directory,
+    plot_title,
+):
+    """Fit (mu - 2.5*sigma) vs SF(ECIN) per momentum bin for one sector.
+    Returns list of dicts: bin_index, low/high_momentum_edge, slope, intercept."""
+    ECIN_SF_in_sector = np.array(data_in_sector["E_ECIN"] / data_in_sector["p"])
+    PCAL_SF_in_sector = np.array(data_in_sector["E_PCAL"] / data_in_sector["p"])
+
+    save_plots = plots_directory is not None
+    sector_fits = []
+
+    if save_plots:
+        fig_all_momenta, axs_all_momenta = plt.subplots(3, 3, figsize=(24, 24))
+        axs_all_momenta = axs_all_momenta.flatten()
+
+    for i, low_momentum_edge in enumerate(momentum_bin_edges[:-1]):
+        high_momentum_edge = momentum_bin_edges[i + 1]
+        momentum_cut = (data_in_sector["p"] > low_momentum_edge) & (
+            data_in_sector["p"] <= high_momentum_edge
+        )
+
+        if save_plots:
+            axs_all_momenta[i].set_xlabel("$E_{ECIN}$/p")
+            axs_all_momenta[i].set_ylabel("$E_{PCAL}$/p")
+            axs_all_momenta[i].set_title(
+                f"{low_momentum_edge} GeV < p < {high_momentum_edge} GeV"
+            )
+
+        if np.sum(momentum_cut) == 0:
+            continue
+
+        ECIN_SF_slice = ECIN_SF_in_sector[momentum_cut]
+        PCAL_SF_slice = PCAL_SF_in_sector[momentum_cut]
+
+        ECIN_bins = (
+            np.linspace(0.08, 0.15, 11)
+            if is_simulation
+            else np.linspace(0.05, 0.15, 11)
+        )
+        PCAL_bins = np.linspace(0.0, 0.25, 51)
+        PCAL_bin_centers = (PCAL_bins[1:] + PCAL_bins[:-1]) / 2
+
+        ECIN_bin_means, ECIN_bin_sigma, valid_ECIN_bin_centers = [], [], []
+
+        if save_plots:
+            fig_gaussians, axs_gaussians = plt.subplots(2, 5, figsize=(28, 18))
+            axs_gaussians = axs_gaussians.flatten()
+
+        for j, low_ECIN_edge in enumerate(ECIN_bins[:-1]):
+            high_ECIN_edge = ECIN_bins[j + 1]
+            ECIN_mask = (ECIN_SF_slice > low_ECIN_edge) & (
+                ECIN_SF_slice <= high_ECIN_edge
+            )
+            PCAL_SF_in_ECIN_slice = PCAL_SF_slice[ECIN_mask]
+
+            counts, _ = np.histogram(PCAL_SF_in_ECIN_slice, bins=PCAL_bins)
+            if save_plots:
+                axs_gaussians[j].hist(PCAL_SF_in_ECIN_slice, bins=PCAL_bins)
+
+            if np.sum(counts) < 100:
+                print(
+                    f"Sector {sector}, {low_momentum_edge}-{high_momentum_edge} GeV: "
+                    f"NO FIT for ECIN slice {low_ECIN_edge:.3f}-{high_ECIN_edge:.3f} "
+                    f"(only {int(np.sum(counts))} events, need >= 100) — skipping this slice"
+                )
+                continue
+
+            if high_ECIN_edge < 0.1:
+                fit_mask = PCAL_bin_centers > 0.11
+                p0 = (
+                    len(PCAL_SF_in_ECIN_slice),
+                    np.mean(PCAL_SF_in_ECIN_slice[PCAL_SF_in_ECIN_slice > 0.11]),
+                    np.std(PCAL_SF_in_ECIN_slice[PCAL_SF_in_ECIN_slice > 0.11]) ** 2,
+                )
+                popt, _ = curve_fit(
+                    gaus, PCAL_bin_centers[fit_mask], counts[fit_mask], p0=p0
+                )
+            else:
+                p0 = (
+                    len(PCAL_SF_in_ECIN_slice),
+                    np.mean(PCAL_SF_in_ECIN_slice),
+                    np.std(PCAL_SF_in_ECIN_slice) ** 2,
+                )
+                popt, _ = curve_fit(gaus, PCAL_bin_centers, counts, p0=p0)
+
+            if save_plots:
+                axs_gaussians[j].plot(PCAL_bin_centers, gaus(PCAL_bin_centers, *popt))
+                axs_gaussians[j].set_title(
+                    f"{round(low_ECIN_edge,3)} < SF(ECIN) < {round(high_ECIN_edge,3)}"
+                )
+                axs_gaussians[j].set_xlabel("SF(PCAL)")
+
+            ECIN_bin_means.append(popt[1])
+            ECIN_bin_sigma.append(np.sqrt(popt[2]))
+            valid_ECIN_bin_centers.append((high_ECIN_edge + low_ECIN_edge) / 2)
+
+        if save_plots:
+            if plot_title is not None:
+                fig_gaussians.suptitle(
+                    plot_title
+                    + f"\nSector {sector}, {low_momentum_edge} GeV<p<{high_momentum_edge} GeV",
+                    y=1.0,
+                )
+            fig_gaussians.tight_layout()
+            fig_gaussians.savefig(
+                plots_directory
+                + f"gaussianfits_sector{sector}_momentum{low_momentum_edge}_{high_momentum_edge}.png"
+            )
+            plt.close(fig_gaussians)
+
+        valid_ECIN_bin_centers = np.array(valid_ECIN_bin_centers)
+        if len(valid_ECIN_bin_centers) == 0:
+            print(
+                f"Sector {sector}, {low_momentum_edge}-{high_momentum_edge} GeV: "
+                "NO FIT — no ECIN slices had enough statistics; every event in this "
+                "sector/momentum bin will FAIL the partial SF cut"
+            )
+            continue
+
+        target = np.asarray(ECIN_bin_means) - 2.5 * np.asarray(ECIN_bin_sigma)
+        try:
+            popt, _ = curve_fit(_line_equation, valid_ECIN_bin_centers, target)
+        except (TypeError, RuntimeError, ValueError):
+            print(
+                f"Sector {sector}, {low_momentum_edge}-{high_momentum_edge} GeV: "
+                "NO FIT — linear fit of SF(ECIN) vs SF(PCAL) failed; every event in "
+                "this sector/momentum bin will FAIL the partial SF cut"
+            )
+            continue
+
+        sector_fits.append(
+            {
+                "bin_index": i,
+                "low_momentum_edge": float(low_momentum_edge),
+                "high_momentum_edge": float(high_momentum_edge),
+                "slope": float(popt[0]),
+                "intercept": float(popt[1]),
+            }
+        )
+
+        if save_plots:
+            fig_scatter = plt.figure(figsize=(12, 8))
+            plt.scatter(valid_ECIN_bin_centers, target)
+            plt.plot(
+                valid_ECIN_bin_centers,
+                _line_equation(valid_ECIN_bin_centers, *popt),
+                color="red",
+                linestyle="dashed",
+            )
+            plt.xlabel("SF(ECIN)")
+            plt.ylabel(r"$\mu$ SF(PCAL) - 2.5$\sigma$ SF(PCAL)")
+            if plot_title is not None:
+                plt.title(
+                    plot_title
+                    + f"\nSector {sector}, {low_momentum_edge} GeV<p<{high_momentum_edge} GeV",
+                    y=1.0,
+                )
+            fig_scatter.savefig(
+                plots_directory
+                + f"sector{sector}_momentum{low_momentum_edge}_{high_momentum_edge}.png"
+            )
+            plt.close(fig_scatter)
+
+            _, bins, _, mesh = axs_all_momenta[i].hist2d(
+                ECIN_SF_slice,
+                PCAL_SF_slice,
+                bins=(100, 100),
+                range=[(0, 0.2), (0, 0.25)],
+                norm=colors.LogNorm(),
+            )
+            ECIN_bin_centers = (bins[1:] + bins[:-1]) / 2
+            divider = make_axes_locatable(axs_all_momenta[i])
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            fig_all_momenta.colorbar(mesh, cax=cax)
+            axs_all_momenta[i].plot(
+                ECIN_bin_centers, _line_equation(ECIN_bin_centers, *popt), color="red"
+            )
+
+    if save_plots:
+        if plot_title is not None:
+            fig_all_momenta.suptitle(plot_title + f"\nSector {sector}", y=0.98)
+        fig_all_momenta.tight_layout()
+        fig_all_momenta.savefig(
+            plots_directory + f"partial_sampling_sector{sector}.png"
+        )
+        plt.close(fig_all_momenta)
+
+    return sector_fits
+
+
+def _plot_sector_summary_from_params(
+    data_in_sector, sector, sector_fits, plots_directory, plot_title
+):
+    """Apply-mode diagnostic: hist2d per momentum bin with the *loaded* fit line overlaid."""
+    ECIN_SF_in_sector = np.array(data_in_sector["E_ECIN"] / data_in_sector["p"])
+    PCAL_SF_in_sector = np.array(data_in_sector["E_PCAL"] / data_in_sector["p"])
+
+    fig_all_momenta, axs_all_momenta = plt.subplots(3, 3, figsize=(24, 24))
+    axs_all_momenta = axs_all_momenta.flatten()
+
+    for fit in sector_fits:
+        i = fit["bin_index"]
+        low, high = fit["low_momentum_edge"], fit["high_momentum_edge"]
+        momentum_cut = (data_in_sector["p"] > low) & (data_in_sector["p"] <= high)
+
+        axs_all_momenta[i].set_xlabel("$E_{ECIN}$/p")
+        axs_all_momenta[i].set_ylabel("$E_{PCAL}$/p")
+        axs_all_momenta[i].set_title(f"{low} GeV < p < {high} GeV")
+
+        if np.sum(momentum_cut) == 0:
+            continue
+
+        _, bins, _, mesh = axs_all_momenta[i].hist2d(
+            ECIN_SF_in_sector[momentum_cut],
+            PCAL_SF_in_sector[momentum_cut],
+            bins=(100, 100),
+            range=[(0, 0.2), (0, 0.25)],
+            norm=colors.LogNorm(),
+        )
+        ECIN_bin_centers = (bins[1:] + bins[:-1]) / 2
+        divider = make_axes_locatable(axs_all_momenta[i])
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        fig_all_momenta.colorbar(mesh, cax=cax)
+        axs_all_momenta[i].plot(
+            ECIN_bin_centers,
+            _line_equation(ECIN_bin_centers, fit["slope"], fit["intercept"]),
+            color="red",
+        )
+
+    if plot_title is not None:
+        fig_all_momenta.suptitle(plot_title + f"\nSector {sector}", y=0.98)
+    fig_all_momenta.tight_layout()
+    fig_all_momenta.savefig(plots_directory + f"partial_sampling_sector{sector}.png")
+    plt.close(fig_all_momenta)
+
+
+def _apply_partial_sf_mask(
+    events, cut_params, log_file=None, number_of_initial_electrons=None
+):
+    sector_arr = np.array(events["reconstructed"]["sector"])
+    p_arr = np.array(events["reconstructed"]["p"])
     ECIN_SF = np.array(events["reconstructed"]["E_ECIN"] / events["reconstructed"]["p"])
-    partial_SF_mask = np.array(
-        events["reconstructed"]["E_PCAL"] / events["reconstructed"]["p"]
-    ) > ecin_epcal_cut(ECIN_SF, is_simulation)
-    partial_SF_mask[events["reconstructed"]["p"] < 4.5] = True
+    PCAL_SF = np.array(events["reconstructed"]["E_PCAL"] / events["reconstructed"]["p"])
 
-    if save_plots:
-        events_without_partialsampling_cut = events[
-            events["pass_fiducial_and_kinematic"]
-        ]
-    # Updating the pass_reco mask to include the partial sampling fraction cut
-    events["pass_reco"] = (events["pass_reco"]) & (partial_SF_mask)
-    if save_plots:
-        events_with_partialsampling_cut = events[
-            (events["pass_fiducial_and_kinematic"]) & (partial_SF_mask)
-        ]
+    partial_SF_mask = np.zeros(len(events["reconstructed"]), dtype=bool)
 
-    if save_plots:
-        fig, axs = plt.subplots(3, 2, figsize=(18, 18))
-        axs = axs.flatten()
-        for sector in range(num_sectors):
-            sector_cut = events_without_partialsampling_cut["reconstructed"][
-                "sector"
-            ] == (sector + 1)
-            if (
-                len(
-                    np.array(
-                        events_without_partialsampling_cut["reconstructed"]["E_ECIN"]
-                        / events_without_partialsampling_cut["reconstructed"]["p"]
-                    )[sector_cut]
-                )
-                == 0
-            ):
-                continue
-            hist, ecin_bins, epcal_bins, mesh = axs[sector].hist2d(
-                np.array(
-                    events_without_partialsampling_cut["reconstructed"]["E_ECIN"]
-                    / events_without_partialsampling_cut["reconstructed"]["p"]
-                )[sector_cut],
-                np.array(
-                    events_without_partialsampling_cut["reconstructed"]["E_PCAL"]
-                    / events_without_partialsampling_cut["reconstructed"]["p"]
-                )[sector_cut],
-                bins=(100, 100),
-                range=[(0, 0.2), (0, 0.25)],
-                norm=colors.LogNorm(),
+    for sector_str, sector_fits in cut_params["sectors"].items():
+        sector = int(sector_str)
+        for fit in sector_fits:
+            current_mask = (
+                (sector_arr == sector)
+                & (p_arr > fit["low_momentum_edge"])
+                & (p_arr <= fit["high_momentum_edge"])
+                & (PCAL_SF > _line_equation(ECIN_SF, fit["slope"], fit["intercept"]))
             )
-            axs[sector].set_xlabel("$E_{ECIN}$/p")
-            axs[sector].set_ylabel("$E_{PCAL}$/p")
-            axs[sector].set_title(f"Sector {sector+1}")
-            divider = make_axes_locatable(axs[sector])
-            cax = divider.append_axes("right", size="5%", pad=0.05)
-            cbar = fig.colorbar(mesh, cax=cax)
-            axs[sector].plot(
-                ecin_bins.tolist(),
-                ecin_epcal_cut(np.array(ecin_bins), is_simulation),
-                color="red",
-            )
-        fig.tight_layout()
-        if plot_title is not None:
-            plt.suptitle(plot_title, y=1.0)
-        if plots_directory is not None:
-            plt.savefig(plots_directory + "partial_sampling_fraction_beforecut.png")
-        plt.close()
+            partial_SF_mask |= current_mask
 
-        fig, axs = plt.subplots(3, 2, figsize=(18, 18))
-        axs = axs.flatten()
-        for sector in range(num_sectors):
-            sector_cut = events_with_partialsampling_cut["reconstructed"]["sector"] == (
-                sector + 1
-            )
-            if (
-                len(
-                    np.array(
-                        events_with_partialsampling_cut["reconstructed"]["E_ECIN"]
-                        / events_with_partialsampling_cut["reconstructed"]["p"]
-                    )[sector_cut]
-                )
-                == 0
-            ):
-                continue
-            hist, ecin_bins, epcal_bins, mesh = axs[sector].hist2d(
-                np.array(
-                    events_with_partialsampling_cut["reconstructed"]["E_ECIN"]
-                    / events_with_partialsampling_cut["reconstructed"]["p"]
-                )[sector_cut],
-                np.array(
-                    events_with_partialsampling_cut["reconstructed"]["E_PCAL"]
-                    / events_with_partialsampling_cut["reconstructed"]["p"]
-                )[sector_cut],
-                bins=(100, 100),
-                range=[(0, 0.2), (0, 0.25)],
-                norm=colors.LogNorm(),
-            )
-            axs[sector].set_xlabel("$E_{ECIN}$/p")
-            axs[sector].set_ylabel("$E_{PCAL}$/p")
-            axs[sector].set_title(f"Sector {sector+1}")
-            divider = make_axes_locatable(axs[sector])
-            cax = divider.append_axes("right", size="5%", pad=0.05)
-            cbar = fig.colorbar(mesh, cax=cax)
-            axs[sector].plot(
-                ecin_bins.tolist(),
-                ecin_epcal_cut(np.array(ecin_bins), is_simulation),
-                color="red",
-            )
-        fig.tight_layout()
-        if plot_title is not None:
-            plt.suptitle(plot_title, y=1.0)
-        if plots_directory is not None:
-            plt.savefig(plots_directory + "partial_sampling_fraction_aftercut.png")
-        plt.close()
+    events["pass_reco"] = events["pass_reco"] & partial_SF_mask
+    events["pass_partial_SF"] = partial_SF_mask
 
     print(f"Have {ak.sum(events['pass_reco'])} events after partial SF cuts")
     if log_file is not None:
         with open(log_file, "a") as f:
             f.write(
-                f"Have {ak.sum(events['pass_reco'])} pass reco events after partial SF cuts\n"
+                f"\nHave {ak.sum(events['pass_reco'])} pass reco events after partial SF cuts\n"
             )
-            f.write(
-                f"Have {ak.sum(partial_SF_mask)/number_of_initial_electrons} fraction of events after partial SF cuts\n"
-            )
-            f.write(
-                f"Have {ak.sum((events['pass_fiducial_and_kinematic']) & (partial_SF_mask))/number_of_initial_electrons} fraction of events after fiducial,kinematic, and partial SF cuts\n"
-            )
-    events["pass_partial_SF"] = partial_SF_mask
+            if number_of_initial_electrons is not None:
+                f.write(
+                    f"Have {ak.sum(partial_SF_mask)/number_of_initial_electrons} fraction of events after partial SF cuts\n"
+                )
+                f.write(
+                    f"Have {ak.sum((events['pass_fiducial']) & (partial_SF_mask))/number_of_initial_electrons} "
+                    "fraction of events after fiducial, and partial SF cuts\n"
+                )
+
     return events
 
 
-def gaus(x, a, mu, sigma):
-    return a * np.exp(-((x - mu) ** 2) / (2 * sigma * sigma))
+def gaus(x, a, mu, sigma_squared):
+    return a * np.exp(-((x - mu) ** 2) / (2 * sigma_squared))
 
 
 def sf_gaussians_by_sector(
@@ -771,9 +1014,7 @@ def apply_sampling_fraction_cut(
     edep_by_sector = []
     edep_bins_by_sector = []
     for sector in range(num_sectors):
-        sector_cut = (electrons["sector"] == (sector + 1)) & (
-            events["pass_fiducial"]
-        )
+        sector_cut = (electrons["sector"] == (sector + 1)) & (events["pass_fiducial"])
         total_ecal_energy = np.array(electrons["total_ecal_energy"][sector_cut])
         sampling_fraction = np.array(electrons["SF"][sector_cut])
         sampling_fraction_by_sector.append(sampling_fraction)
