@@ -943,9 +943,6 @@ def sf_gaussians_by_sector(
         xaxis_bin_mask = (xaxis_in_sector > lower_bin_edge) & (
             xaxis_in_sector < upper_bin_edge
         )
-        sector_sf_mask = (sampling_fractions_in_sector[xaxis_bin_mask] > 0.2) & (
-            sampling_fractions_in_sector[xaxis_bin_mask] < 0.27
-        )
 
         counts, bins, _ = axs[i].hist(
             sampling_fractions_in_sector[xaxis_bin_mask],
@@ -953,24 +950,42 @@ def sf_gaussians_by_sector(
             range=(low_sf_bin, high_sf_bin),
         )
 
+        slice_center = (lower_bin_edge + upper_bin_edge) / 2
         bin_centers = (bins[:-1] + bins[1:]) / 2
-        sf_mask = (bin_centers > 0.2) & (bin_centers < 0.3)
-        popt, pcov = curve_fit(
-            gaus,
-            bin_centers[sf_mask],
-            counts[sf_mask],
-            p0=(
-                len(sampling_fractions_in_sector[xaxis_bin_mask][sector_sf_mask]),
-                np.mean(sampling_fractions_in_sector[xaxis_bin_mask][sector_sf_mask]),
-                np.std(sampling_fractions_in_sector[xaxis_bin_mask][sector_sf_mask]),
-            ),
-        )
+
+        mean_in_bin = np.mean(sampling_fractions_in_sector[xaxis_bin_mask])
+        std_in_bin = np.std(sampling_fractions_in_sector[xaxis_bin_mask])
+        if slice_center < 0.5:
+            sf_mask = (bin_centers > 0.18) & (bin_centers < 0.3)
+        else:
+            sf_mask = (bin_centers > 0.22) & (bin_centers < 0.3)
+        try:
+            popt, pcov = curve_fit(
+                gaus,
+                bin_centers[sf_mask],
+                counts[sf_mask],
+                p0=(
+                    len(sampling_fractions_in_sector[xaxis_bin_mask]),
+                    mean_in_bin,
+                    std_in_bin * std_in_bin,
+                ),
+            )
+            sf_fit_data["mu"].append(popt[1])
+            sf_fit_data["sigma"].append(np.sqrt(popt[2]))
+            axs[i].plot(bin_centers[sf_mask], gaus(bin_centers[sf_mask], *popt))
+        except Exception:
+            print(
+                f"Sector {sector_number}: NO FIT for {xaxis_name} slice "
+                f"{round(lower_bin_edge,3)}-{round(upper_bin_edge,3)} GeV — "
+                "Gaussian fit of SF failed; this bin will be dropped from the "
+                "mu(Edep)/sigma(Edep) fit"
+            )
+            sf_fit_data["mu"].append(None)
+            sf_fit_data["sigma"].append(None)
         sf_fit_data["bin_low"].append(lower_bin_edge)
         sf_fit_data["bin_high"].append(upper_bin_edge)
         sf_fit_data["bin_center"].append((upper_bin_edge + lower_bin_edge) / 2)
-        sf_fit_data["mu"].append(popt[1])
-        sf_fit_data["sigma"].append(popt[2])
-        axs[i].plot(bin_centers, gaus(bin_centers, *popt))
+
         axs[i].set_xlabel("SF", fontsize=10)
         axs[i].set_title(
             f"{round(lower_bin_edge,3)} GeV < {xaxis_name} < {round(upper_bin_edge,3)} GeV",
@@ -985,24 +1000,181 @@ def sf_gaussians_by_sector(
         if plots_directory is not None:
             plt.savefig(plots_directory + f"sector{sector_number}_gaussian_fit.png")
     plt.close()
-    sf_fit_data_df = pd.DataFrame(sf_fit_data)
-    return sf_fit_data_df
+    return pd.DataFrame(sf_fit_data)
+
+
+def _build_sector_arrays(
+    electrons, pass_fiducial, save_plots, plots_directory, plot_title
+):
+    """Builds per-sector edep/SF arrays (fiducial-filtered) and optionally plots the raw 2D hist."""
+    low_edep_bin, high_edep_bin = 0.12, 2.0
+    low_sf_bin, high_sf_bin = 0.1, 0.35
+
+    sampling_fraction_by_sector, edep_by_sector, edep_bins_by_sector = [], [], []
+
+    if save_plots:
+        fig, axs = plt.subplots(3, 2, figsize=(18, 18))
+        axs = axs.flatten()
+
+    for sector in range(num_sectors):
+        sector_cut = (electrons["sector"] == (sector + 1)) & (pass_fiducial)
+        total_ecal_energy = np.array(electrons["total_ecal_energy"][sector_cut])
+        sampling_fraction = np.array(electrons["SF"][sector_cut])
+        sampling_fraction_by_sector.append(sampling_fraction)
+        edep_by_sector.append(total_ecal_energy)
+
+        if save_plots:
+            _, edep_bins, _, mesh = axs[sector].hist2d(
+                total_ecal_energy,
+                sampling_fraction,
+                bins=(100, 100),
+                range=[(low_edep_bin, high_edep_bin), (low_sf_bin, high_sf_bin)],
+                norm=colors.LogNorm(),
+            )
+            edep_bins_by_sector.append(edep_bins)
+            axs[sector].set_xlabel("$E_{dep}$ (GeV)")
+            axs[sector].set_ylabel("$(E_{PCAL}+E_{ECIN}+E_{ECOUT})/P$")
+            axs[sector].set_title(f"Sector {sector+1}")
+            divider = make_axes_locatable(axs[sector])
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            fig.colorbar(mesh, cax=cax)
+        else:
+            # still need bin edges for fitting even without plotting
+            edep_bins_by_sector.append(
+                np.histogram_bin_edges(
+                    total_ecal_energy, bins=100, range=(low_edep_bin, high_edep_bin)
+                )
+            )
+
+    if save_plots:
+        fig.tight_layout()
+        if plot_title is not None:
+            plt.suptitle(plot_title, y=1.0)
+        if plots_directory is not None:
+            plt.savefig(plots_directory + "sector_SF_without_fit.png")
+        plt.close()
+
+    return sampling_fraction_by_sector, edep_by_sector, edep_bins_by_sector
+
+
+def _fit_mu_sigma_vs_edep(
+    sf_fit_data_df, sector_number, save_plots, plots_directory, plot_title
+):
+    none_mask = sf_fit_data_df["mu"].notna() & sf_fit_data_df["sigma"].notna()
+    bin_centers = sf_fit_data_df["bin_center"][none_mask].tolist()
+
+    popt_mu, _ = curve_fit(
+        sf_fit_function,
+        bin_centers,
+        sf_fit_data_df["mu"][none_mask].tolist(),
+        p0=(0.2, -0.03, -0.001),
+    )
+    popt_sigma, _ = curve_fit(
+        sf_fit_function,
+        bin_centers,
+        sf_fit_data_df["sigma"][none_mask].tolist(),
+        p0=(0.2, -0.03, -0.001),
+    )
+
+    if save_plots:
+        fig, axs = plt.subplots(1, 2, figsize=(15, 6))
+        fig.subplots_adjust(hspace=0.1, wspace=0.3)
+        axs[0].scatter(bin_centers, sf_fit_data_df["mu"][none_mask].tolist())
+        axs[0].set_xlabel("bin center (GeV)")
+        axs[0].set_ylabel("SF $\\mu$")
+        axs[0].plot(
+            bin_centers, sf_fit_function(np.array(bin_centers), *popt_mu), color="red"
+        )
+
+        axs[1].scatter(bin_centers, sf_fit_data_df["sigma"][none_mask].tolist())
+        axs[1].set_xlabel("bin center (GeV)")
+        axs[1].set_ylabel("SF $\\sigma$")
+        axs[1].plot(
+            bin_centers,
+            sf_fit_function(np.array(bin_centers), *popt_sigma),
+            color="red",
+        )
+
+        if plot_title is not None:
+            plt.suptitle(plot_title + f",Sector {sector_number}", y=1.0)
+        if plots_directory is not None:
+            plt.savefig(plots_directory + f"SF_mu_fits_sector{sector_number}.png")
+        plt.close()
+
+    return popt_mu, popt_sigma
+
+
+def _plot_sf_with_fit(
+    edep_by_sector,
+    sampling_fraction_by_sector,
+    popt_mu_by_sector,
+    popt_sigma_by_sector,
+    plots_directory,
+    plot_title,
+):
+    fig, axs = plt.subplots(3, 2, figsize=(18, 18))
+    axs = axs.flatten()
+
+    for sector in range(num_sectors):
+        popt_mu = popt_mu_by_sector[sector]
+        popt_sigma = popt_sigma_by_sector[sector]
+
+        hist, edep_bins, sf_bins, mesh = axs[sector].hist2d(
+            edep_by_sector[sector],
+            sampling_fraction_by_sector[sector],
+            bins=(100, 100),
+            range=[(0, 2.5), (0.05, 0.35)],
+            norm=colors.LogNorm(),
+        )
+        edep_bin_centers = (edep_bins[:-1] + edep_bins[1:]) / 2
+
+        axs[sector].set_xlabel("$E_{dep}$ (GeV)")
+        axs[sector].set_ylabel("$(E_{PCAL}+E_{ECIN}+E_{ECOUT})/P$")
+        axs[sector].set_title(f"Sector {sector+1}")
+        divider = make_axes_locatable(axs[sector])
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        fig.colorbar(mesh, cax=cax)
+
+        mu_curve = sf_fit_function(np.array(edep_bin_centers.tolist()), *popt_mu)
+        sigma_curve = sf_fit_function(np.array(edep_bin_centers.tolist()), *popt_sigma)
+        axs[sector].plot(edep_bin_centers.tolist(), mu_curve, color="black")
+        axs[sector].plot(
+            edep_bin_centers.tolist(), mu_curve + 3.5 * sigma_curve, color="red"
+        )
+        axs[sector].plot(
+            edep_bin_centers.tolist(), mu_curve - 3.5 * sigma_curve, color="red"
+        )
+        axs[sector].set_xlim(0, 2.5)
+        axs[sector].set_ylim(0.05, 0.35)
+
+    fig.tight_layout()
+    if plot_title is not None:
+        plt.suptitle(plot_title, y=1.0)
+    if plots_directory is not None:
+        plt.savefig(plots_directory + "sector_SF_with_fit.png")
+    plt.close()
+
+
+"""
+Tightening the SF vs ECAL Edep fit to mu +- 3.5 sigma from 5 sigma
+To do this, we bin in SF vs Edep and in each Edep bin, we fit the SF with a Gaussian 
+We then fit the Gaussian mean and sigma with a + b / x + c / (x * x) and remove events falling ouside +- 3.5 sigma
+This is done separately for each sector
+There is a develop_cuts mode where these fits are done and saved to a json file,
+by default the cuts are read from the json file and applied without redoing the fits.
+"""
 
 
 def apply_sampling_fraction_cut(
     events,
+    develop_cuts=False,
+    cut_params_path=None,
     save_plots=True,
     plots_directory=None,
     plot_title=None,
     log_file=None,
     number_of_initial_electrons=None,
 ):
-
-    low_edep_bin = 0.6
-    high_edep_bin = 1.6
-    low_sf_bin = 0.1
-    high_sf_bin = 0.35
-
     events["reconstructed"] = ak.with_field(
         events["reconstructed"],
         events["reconstructed"]["E_PCAL"]
@@ -1010,166 +1182,96 @@ def apply_sampling_fraction_cut(
         + events["reconstructed"]["E_ECOUT"],
         "total_ecal_energy",
     )
-
     electrons = events["reconstructed"]
-    fig, axs = plt.subplots(3, 2, figsize=(18, 18))
-    axs = axs.flatten()
-    sampling_fraction_by_sector = []
-    edep_by_sector = []
-    edep_bins_by_sector = []
-    for sector in range(num_sectors):
-        sector_cut = (electrons["sector"] == (sector + 1)) & (events["pass_fiducial"])
-        total_ecal_energy = np.array(electrons["total_ecal_energy"][sector_cut])
-        sampling_fraction = np.array(electrons["SF"][sector_cut])
-        sampling_fraction_by_sector.append(sampling_fraction)
-        edep_by_sector.append(total_ecal_energy)
 
-        _, edep_bins, _, mesh = axs[sector].hist2d(
-            total_ecal_energy,
-            sampling_fraction,
-            bins=(100, 100),
-            range=[(low_edep_bin, high_edep_bin), (low_sf_bin, high_sf_bin)],
-            norm=colors.LogNorm(),
+    if develop_cuts:
+        sampling_fraction_by_sector, edep_by_sector, edep_bins_by_sector = (
+            _build_sector_arrays(
+                electrons,
+                events["pass_fiducial"],
+                save_plots,
+                plots_directory,
+                plot_title,
+            )
         )
-        edep_bins_by_sector.append(edep_bins)
-        axs[sector].set_xlabel("$E_{dep}$ (GeV)")
-        axs[sector].set_ylabel("$(E_{PCAL}+E_{ECIN}+E_{ECOUT})/P$")
-        axs[sector].set_title(f"Sector {sector+1}")
-        divider = make_axes_locatable(axs[sector])
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        cbar = fig.colorbar(mesh, cax=cax)
-    fig.tight_layout()
-    if save_plots:
-        if plot_title is not None:
-            plt.suptitle(plot_title, y=1.0)
-        if plots_directory is not None:
-            plt.savefig(plots_directory + "sector_SF_without_fit.png")
-    plt.close()
 
-    sf_fit_data_df_by_sector = []
-    popt_mu_by_sector, popt_sigma_by_sector = [], []
-
-    def sf_fit_function(x, a, b, c, d):
-        return a + b * x + c * (x * x) + d * (x * x * x)
-
-    # In each sector, fitting the sampling fraction in bins of Edep for the events that pass reconstruction
-    for sector in range(num_sectors):
-        sector_number = sector + 1
-        print(f"Fitting SF vs. Edep for sector {sector_number}")
-        sf_df = sf_gaussians_by_sector(
-            sampling_fraction_by_sector[sector],
-            edep_by_sector[sector],
-            edep_bins_by_sector[sector],
-            sector_number,
-            SF_bins=(low_sf_bin, high_sf_bin),
-            xaxis_name="$E_{dep}$",
-            save_plots=save_plots,
-            plots_directory=plots_directory,
-            plot_title=plot_title,
-        )
-        sf_fit_data_df_by_sector.append(sf_df)
-
-        # Fitting the mu and sigma vs momentum for each sector
-        fig, axs = plt.subplots(1, 2, figsize=(15, 6))
-        fig.subplots_adjust(hspace=0.1, wspace=0.3)
-        sf_fit_data_df = sf_fit_data_df_by_sector[sector]
-        axs[0].scatter(
-            sf_fit_data_df["bin_center"].tolist(), sf_fit_data_df["mu"].tolist()
-        )
-        axs[0].set_xlabel("bin center (GeV)")
-        axs[0].set_ylabel("SF $\mu$")
-        popt_mu, pcov_mu = curve_fit(
-            sf_fit_function,
-            sf_fit_data_df["bin_center"].tolist(),
-            sf_fit_data_df["mu"].tolist(),
-            p0=(0.2, 0.001, 0.00001, 0.00001),
-        )
-        axs[0].plot(
-            sf_fit_data_df["bin_center"].tolist(),
-            sf_fit_function(np.array(sf_fit_data_df["bin_center"].tolist()), *popt_mu),
-            color="red",
-        )
-        axs[1].scatter(
-            sf_fit_data_df["bin_center"].tolist(), sf_fit_data_df["sigma"].tolist()
-        )
-        axs[1].set_xlabel("bin center (GeV)")
-        axs[1].set_ylabel("SF $\sigma$")
-        popt_sigma, pcov_sigma = curve_fit(
-            sf_fit_function,
-            sf_fit_data_df["bin_center"].tolist(),
-            sf_fit_data_df["sigma"].tolist(),
-            p0=(0.002, 0.001, 0.00001, 0.00001),
-        )
-        axs[1].plot(
-            sf_fit_data_df["bin_center"].tolist(),
-            sf_fit_function(
-                np.array(sf_fit_data_df["bin_center"].tolist()), *popt_sigma
-            ),
-            color="red",
-        )
-        if save_plots:
-            if plot_title is not None:
-                plt.suptitle(plot_title + f",Sector {sector_number}", y=1.0)
-            if plots_directory is not None:
-                plt.savefig(plots_directory + f"SF_mu_fits_sector{sector_number}.png")
-        plt.close()
-        popt_mu_by_sector.append(popt_mu)
-        popt_sigma_by_sector.append(popt_sigma)
-
-    fig, axs = plt.subplots(3, 2, figsize=(18, 18))
-    axs = axs.flatten()
-
-    # Plotting the SF vs edep for events that pass reco before SF cut and the SF cut curves
-    if save_plots:
+        popt_mu_by_sector, popt_sigma_by_sector = [], []
         for sector in range(num_sectors):
-            # Getting the fit parameters for our given sector
-            popt_mu = popt_mu_by_sector[sector]
-            popt_sigma = popt_sigma_by_sector[sector]
-
-            hist, edep_bins, sf_bins, mesh = axs[sector].hist2d(
-                edep_by_sector[sector],
+            sector_number = sector + 1
+            print(f"Fitting SF vs. Edep for sector {sector_number}")
+            sf_df = sf_gaussians_by_sector(
                 sampling_fraction_by_sector[sector],
-                bins=(100, 100),
-                range=[(0.3, 2.1), (0.15, 0.32)],
-                norm=colors.LogNorm(),
+                edep_by_sector[sector],
+                edep_bins_by_sector[sector],
+                sector_number,
+                SF_bins=(0.1, 0.35),
+                xaxis_name="$E_{dep}$",
+                save_plots=save_plots,
+                plots_directory=plots_directory,
+                plot_title=plot_title,
+            )
+            popt_mu, popt_sigma = _fit_mu_sigma_vs_edep(
+                sf_df, sector_number, save_plots, plots_directory, plot_title
+            )
+            popt_mu_by_sector.append(popt_mu)
+            popt_sigma_by_sector.append(popt_sigma)
+
+        if save_plots:
+            _plot_sf_with_fit(
+                edep_by_sector,
+                sampling_fraction_by_sector,
+                popt_mu_by_sector,
+                popt_sigma_by_sector,
+                plots_directory,
+                plot_title,
             )
 
-            edep_bin_centers = (edep_bins[:-1] + edep_bins[1:]) / 2
+        cut_params = {
+            "sectors": {
+                str(sector + 1): {
+                    "mu": popt_mu_by_sector[sector].tolist(),
+                    "sigma": popt_sigma_by_sector[sector].tolist(),
+                }
+                for sector in range(num_sectors)
+            }
+        }
+        if cut_params_path is not None:
+            with open(cut_params_path, "w") as f:
+                json.dump(cut_params, f, indent=2)
 
-            axs[sector].set_xlabel("$E_{dep}$ (GeV)")
-            axs[sector].set_ylabel("$(E_{PCAL}+E_{ECIN}+E_{ECOUTT})/P$")
-            axs[sector].set_title(f"Sector {sector+1}")
-            divider = make_axes_locatable(axs[sector])
-            cax = divider.append_axes("right", size="5%", pad=0.05)
-            cbar = fig.colorbar(mesh, cax=cax)
+    else:
+        if cut_params_path is None:
+            raise ValueError("cut_params_path is required when develop_cuts=False")
+        with open(cut_params_path, "r") as f:
+            cut_params = json.load(f)
 
-            axs[sector].plot(
-                edep_bin_centers.tolist(),
-                sf_fit_function(np.array(edep_bin_centers.tolist()), *popt_mu),
-                color="black",
+        popt_mu_by_sector = [
+            np.array(cut_params["sectors"][str(s + 1)]["mu"])
+            for s in range(num_sectors)
+        ]
+        popt_sigma_by_sector = [
+            np.array(cut_params["sectors"][str(s + 1)]["sigma"])
+            for s in range(num_sectors)
+        ]
+
+        if save_plots and plots_directory is not None:
+            sampling_fraction_by_sector, edep_by_sector, _ = _build_sector_arrays(
+                electrons,
+                events["pass_fiducial"],
+                save_plots,
+                plots_directory,
+                plot_title,
             )
-            axs[sector].plot(
-                edep_bin_centers.tolist(),
-                sf_fit_function(np.array(edep_bin_centers.tolist()), *popt_mu)
-                + 3.5
-                * sf_fit_function(np.array(edep_bin_centers.tolist()), *popt_sigma),
-                color="red",
-            )
-            axs[sector].plot(
-                edep_bin_centers.tolist(),
-                sf_fit_function(np.array(edep_bin_centers.tolist()), *popt_mu)
-                - 3.5
-                * sf_fit_function(np.array(edep_bin_centers.tolist()), *popt_sigma),
-                color="red",
+            _plot_sf_with_fit(
+                edep_by_sector,
+                sampling_fraction_by_sector,
+                popt_mu_by_sector,
+                popt_sigma_by_sector,
+                plots_directory,
+                plot_title,
             )
 
-        fig.tight_layout()
-        if plot_title is not None:
-            plt.suptitle(plot_title, y=1.0)
-        if plots_directory is not None:
-            plt.savefig(plots_directory + "sector_SF_with_fit.png")
-        plt.close()
-
+    # --- apply the cut (identical in both modes) ---
     new_pass_reco_mask = np.ones(len(events["pass_reco"]), dtype=bool)
     SF_mask = np.ones(len(events["pass_reco"]), dtype=bool)
     for sector in range(num_sectors):
@@ -1181,11 +1283,18 @@ def apply_sampling_fraction_cut(
         sampling_fraction_in_sector = electrons["SF"][sector_mask]
         fit_mu = sf_fit_function(edep_in_sector, *popt_mu)
         fit_sigma = sf_fit_function(edep_in_sector, *popt_sigma)
+
         if log_file is not None:
             with open(log_file, "a") as f:
-                f.write(f"Sector {sector+1} SF cut parameters:\n")
-                f.write(f"mu fit parameters: {popt_mu}\n")
-                f.write(f"sigma fit parameters: {popt_sigma}\n")
+                f.write(f"\nSector {sector+1} sampling fraction fits\n")
+                f.write("a_mu & b_mu & c_mu & a_sigma & b_sigma & c_sigma\n")
+                row = (
+                    f"{popt_mu[0]:.6f} & {popt_mu[1]:.6f} & {popt_mu[2]:.6f}"
+                    f" & {popt_sigma[0]:.6f} & {popt_sigma[1]:.6f} & {popt_sigma[2]:.6f}"
+                    " \\\\\n"
+                )
+                f.write(row)
+
         SF_mask[sector_mask] = (
             sampling_fraction_in_sector < (fit_mu + 3.5 * fit_sigma)
         ) & (sampling_fraction_in_sector > (fit_mu - 3.5 * fit_sigma))
@@ -1196,11 +1305,12 @@ def apply_sampling_fraction_cut(
         )
 
     events["pass_reco"] = new_pass_reco_mask
+    events["pass_SF"] = SF_mask
     print(f"Have {ak.sum(events['pass_reco'])} events after SF cuts")
     if log_file is not None:
         with open(log_file, "a") as f:
             f.write(
-                f"Have {ak.sum(events['pass_reco'])} pass reco events after SF cuts\n"
+                f"\nHave {ak.sum(events['pass_reco'])} pass reco events after SF cuts\n"
             )
             f.write(
                 f"Have {ak.sum(SF_mask)/number_of_initial_electrons} fraction of events after SF cuts\n"
@@ -1212,7 +1322,7 @@ def apply_sampling_fraction_cut(
                 f"Have {ak.sum((events['pass_partial_SF']) & (SF_mask))/number_of_initial_electrons} fraction of events after partial and SF cuts\n"
             )
             f.write(
-                f"Have {ak.sum((events['pass_fiducial']) & (events['pass_partial_SF']) & (SF_mask))/ak.sum((events['pass_fiducial']))} fraction of events that pass fiducial cuts after partial and SF cuts\n"
+                f"Have {ak.sum((events['pass_fiducial']) & (events['pass_partial_SF']) & (SF_mask))/ak.sum((events['pass_fiducial']))} fraction of events that pass fiducial cuts, but also partial and SF cuts\n"
             )
     return events
 
