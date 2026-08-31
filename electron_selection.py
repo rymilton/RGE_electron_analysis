@@ -134,6 +134,16 @@ def parse_arguments():
     return flags
 
 
+def get_plot_title(flags, parameters):
+    if not flags.save_plots:
+        return None
+    plot_names = parameters.get("PLOT_TITLES", {})
+    if flags.data_name in plot_names:
+        return f"RGE LD2 + {flags.solid_target} : {plot_names[flags.data_name]}"
+    else:
+        return f"RGE LD2 + {flags.solid_target} : {flags.run_number} Pass 1"
+
+
 def main():
     flags = parse_arguments()
 
@@ -161,13 +171,7 @@ def main():
     os.makedirs(flags.cut_directory, exist_ok=True)
     if flags.save_plots:
         os.makedirs(flags.plots_directory, exist_ok=True)
-        plot_names = parameters.get("PLOT_TITLES", {})
-        if flags.data_name in plot_names:
-            plot_title = (
-                f"RGE LD2 + {flags.solid_target} : {plot_names[flags.data_name]}"
-            )
-    else:
-        plot_title = None
+    plot_title = get_plot_title(flags, parameters)
     # Apply DIS cuts and other basic cuts
     events_array = apply_kinematic_cuts(
         events_array,
