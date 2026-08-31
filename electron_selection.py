@@ -217,6 +217,8 @@ def main():
         events_array = apply_target_selection(
             events=events_array,
             solid_target_name=flags.solid_target,
+            develop_cuts=flags.develop_cuts,
+            cut_params_path=os.path.join(flags.cut_directory, "target.json"),
             save_plots=flags.save_plots,
             plots_directory=flags.plots_directory,
             plot_title=plot_title,
