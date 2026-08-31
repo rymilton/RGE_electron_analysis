@@ -116,6 +116,18 @@ def parse_arguments():
         help="Number of run being analyzed",
         type=int,
     )
+    parser.add_argument(
+        "--develop_cuts",
+        default=False,
+        help="Set to true if you want to remake the cuts",
+        action="store_true",
+    )
+    parser.add_argument(
+        "--cut_directory",
+        default="./cuts/C_D2/",
+        help="Name of the directory containing the cut json files",
+        type=str,
+    )
 
     flags = parser.parse_args()
 
@@ -146,6 +158,7 @@ def main():
         log_file=flags.log_file,
     )
     num_EB_electrons = len(events_array)
+    os.makedirs(flags.cut_directory, exist_ok=True)
     if flags.save_plots:
         os.makedirs(flags.plots_directory, exist_ok=True)
         plot_names = parameters.get("PLOT_TITLES", {})
@@ -179,6 +192,8 @@ def main():
     # Apply partial sampling fraction cuts
     events_array = apply_partial_sampling_fraction_cut(
         events=events_array,
+        develop_cuts=flags.develop_cuts,
+        cut_params_path=os.path.join(flags.cut_directory, "partial_sampling.json"),
         is_simulation=flags.simulation,
         save_plots=flags.save_plots,
         plots_directory=flags.plots_directory,
