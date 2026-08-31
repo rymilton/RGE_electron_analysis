@@ -274,6 +274,46 @@ def apply_fiducial_cuts(
         plt.close()
 
         ########################################################################
+        ############ Plotting the PCAL hits that were removed ##################
+        ########################################################################
+        fig = plt.figure(figsize=(12, 10))
+
+        if "PCAL_x" in events["reconstructed"].fields:
+            PCAL_x = np.array(events["reconstructed"]["PCAL_x"])
+            PCAL_y = np.array(events["reconstructed"]["PCAL_y"])
+
+            removed_mask = (events["reconstructed"]["PCAL_x"] > -9999) & (
+                ~PCAL_fiducial_mask
+            )
+
+            _, _, _, mesh = plt.hist2d(
+                x=PCAL_x,
+                y=PCAL_y,
+                bins=(300, 300),
+                range=((-450, 450), (-450, 450)),
+                norm=colors.LogNorm(),
+            )
+
+            plt.scatter(
+                PCAL_x[removed_mask],
+                PCAL_y[removed_mask],
+                facecolor="red",
+                s=0.1,
+            )
+            plt.colorbar()
+            plt.ylabel("PCAL y (cm)")
+            plt.xlabel("PCAL x (cm)")
+
+            if plot_title is not None:
+                plt.title(plot_title)
+
+            if plots_directory is not None:
+                plt.tight_layout()
+                plt.savefig(plots_directory + "PCAL_removedhits.png")
+
+            plt.close()
+
+        ########################################################################
         ############## Plotting the DC cuts before fiducial cuts ##############
         ########################################################################
         region1_low_bin, region1_high_bin, region1_num_bins = (
