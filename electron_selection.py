@@ -204,6 +204,8 @@ def main():
     # Apply SF cuts
     events_array = apply_sampling_fraction_cut(
         events=events_array,
+        develop_cuts=flags.develop_cuts,
+        cut_params_path=os.path.join(flags.cut_directory, "sampling_fraction.json"),
         save_plots=flags.save_plots,
         plots_directory=flags.plots_directory,
         plot_title=plot_title,
