@@ -1333,91 +1333,122 @@ def double_gaussian(x, amp1, mean1, sigma1, amp2, mean2, sigma2):
     )
 
 
-def apply_target_selection(
-    events,
-    solid_target_name,
-    save_plots=True,
-    plots_directory=None,
-    plot_title=None,
-    log_file=None,
-    number_of_initial_electrons=None,
-):
-
-    def double_gaussian(x, amp1, mean1, sigma1, amp2, mean2, sigma2):
-        return amp1 * np.exp(-((x - mean1) ** 2) / (2 * sigma1)) + amp2 * np.exp(
-            -((x - mean2) ** 2) / (2 * sigma2)
-        )
-
-    if save_plots:
-        fig, axs = plt.subplots(3, 2, figsize=(18, 18))
-        axs = axs.flatten()
-    num_sectors = 6
+def _fit_vertex_z_sectors(electrons, pass_reco, num_sectors):
+    """Double-Gaussian fit of v_z per sector. ONLY called in develop_cuts mode."""
     z_fit_parameters_all_sectors = []
-
-    electrons = events["reconstructed"]
     for sector in range(num_sectors):
-
-        sector_cut = (electrons["sector"] == (sector + 1)) & (events["pass_reco"])
-
+        sector_cut = (electrons["sector"] == (sector + 1)) & (pass_reco)
         vertex_z = np.array(electrons["v_z"][sector_cut])
         vertex_z_counts, vertex_z_bins = np.histogram(
-            vertex_z,
-            bins=100,
-            range=(-12, 5),
+            vertex_z, bins=100, range=(-12, 5)
         )
         vertex_z_bin_centers = (vertex_z_bins[:-1] + vertex_z_bins[1:]) / 2
-        lower_fit_range = -12
-        upper_fit_range = 12
 
         amplitude_guess = np.max(vertex_z_counts)
-        mean_z_guess = ak.mean(vertex_z)
-        std_z_guess = ak.std(vertex_z)
 
-        z_fit_parameters, z_fit_covariance = curve_fit(
+        z_fit_parameters, _ = curve_fit(
             double_gaussian,
             vertex_z_bin_centers,
             vertex_z_counts,
             p0=(amplitude_guess, -7, 2.5, amplitude_guess, -1.5, 1.5),
         )
-        y_fit = double_gaussian(vertex_z_bin_centers, *z_fit_parameters)
         z_fit_parameters_all_sectors.append(z_fit_parameters)
 
-        if save_plots:
-            axs[sector].hist(vertex_z, bins=100, range=(-12, 5), histtype="step")
-            axs[sector].plot(vertex_z_bin_centers, y_fit, color="r")
-            axs[sector].set_xlabel("$v_{z}$ (cm)")
-            axs[sector].set_title(f"Sector {sector+1}")
-    if save_plots:
-        fig.tight_layout()
-        if plot_title is not None:
-            plt.suptitle(plot_title, y=1.0)
-        if plots_directory is not None:
-            plt.savefig(plots_directory + "zvertex_fits.png")
+    return z_fit_parameters_all_sectors
 
+
+def _derive_target_params(z_fit_parameters_all_sectors, num_sectors):
+    """Pure arithmetic (no fitting): assign which Gaussian is LD2 vs solid, per sector.
+    ONLY called in develop_cuts mode -- result is what gets cached."""
     deuterium_mean_by_sector, deuterium_sigma_by_sector = [], []
     solid_mean_by_sector, solid_sigma_by_sector = [], []
 
-    if save_plots:
-        fig, axs = plt.subplots(3, 2, figsize=(18, 18))
-        axs = axs.flatten()
     for sector in range(num_sectors):
         z_fit_parameters = z_fit_parameters_all_sectors[sector]
-        sector_cut = (electrons["sector"] == (sector + 1)) & (events["pass_reco"])
-
-        vertex_z = np.array(electrons["v_z"][sector_cut])
-        vertex_z_counts, vertex_z_bins = np.histogram(
-            vertex_z,
-            bins=100,
-            range=(-12, 5),
-        )
-        vertex_z_bin_centers = (vertex_z_bins[:-1] + vertex_z_bins[1:]) / 2
         deuterium_z_mean = min(z_fit_parameters[1], z_fit_parameters[4])
         if deuterium_z_mean == z_fit_parameters[1]:
             deuterium_z_sigma = z_fit_parameters[2]
             solid_z_mean, solid_z_sigma = z_fit_parameters[4], z_fit_parameters[5]
-        elif deuterium_z_mean == z_fit_parameters[4]:
+        else:
             deuterium_z_sigma = z_fit_parameters[5]
             solid_z_mean, solid_z_sigma = z_fit_parameters[1], z_fit_parameters[2]
+
+        deuterium_mean_by_sector.append(float(deuterium_z_mean))
+        deuterium_sigma_by_sector.append(float(deuterium_z_sigma))
+        solid_mean_by_sector.append(float(solid_z_mean))
+        solid_sigma_by_sector.append(float(solid_z_sigma))
+
+    return (
+        deuterium_mean_by_sector,
+        deuterium_sigma_by_sector,
+        solid_mean_by_sector,
+        solid_sigma_by_sector,
+    )
+
+
+def _plot_zvertex_fits(
+    electrons,
+    pass_reco,
+    z_fit_parameters_all_sectors,
+    num_sectors,
+    plots_directory,
+    plot_title,
+):
+    """Raw fit diagnostic. Develop mode only -- nothing to show here in apply mode."""
+    fig, axs = plt.subplots(3, 2, figsize=(18, 18))
+    axs = axs.flatten()
+    for sector in range(num_sectors):
+        sector_cut = (electrons["sector"] == (sector + 1)) & (pass_reco)
+        vertex_z = np.array(electrons["v_z"][sector_cut])
+        vertex_z_counts, vertex_z_bins = np.histogram(
+            vertex_z, bins=100, range=(-12, 5)
+        )
+        vertex_z_bin_centers = (vertex_z_bins[:-1] + vertex_z_bins[1:]) / 2
+        y_fit = double_gaussian(
+            vertex_z_bin_centers, *z_fit_parameters_all_sectors[sector]
+        )
+
+        axs[sector].hist(vertex_z, bins=100, range=(-12, 5), histtype="step")
+        axs[sector].plot(vertex_z_bin_centers, y_fit, color="r")
+        axs[sector].set_xlabel("$v_{z}$ (cm)")
+        axs[sector].set_title(f"Sector {sector+1}")
+
+    fig.tight_layout()
+    if plot_title is not None:
+        plt.suptitle(plot_title, y=1.0)
+    if plots_directory is not None:
+        plt.savefig(plots_directory + "zvertex_fits.png")
+    plt.close()
+
+
+def _plot_target_selections(
+    electrons,
+    pass_reco,
+    deuterium_mean_by_sector,
+    deuterium_sigma_by_sector,
+    solid_mean_by_sector,
+    solid_sigma_by_sector,
+    solid_target_name,
+    num_sectors,
+    plots_directory,
+    plot_title,
+):
+    """Application diagnostic -- runs in BOTH modes, purely from cached numbers."""
+    fig, axs = plt.subplots(3, 2, figsize=(18, 18))
+    axs = axs.flatten()
+
+    for sector in range(num_sectors):
+        sector_cut = (electrons["sector"] == (sector + 1)) & (pass_reco)
+        vertex_z = np.array(electrons["v_z"][sector_cut])
+
+        deuterium_z_mean, deuterium_z_sigma = (
+            deuterium_mean_by_sector[sector],
+            deuterium_sigma_by_sector[sector],
+        )
+        solid_z_mean, solid_z_sigma = (
+            solid_mean_by_sector[sector],
+            solid_sigma_by_sector[sector],
+        )
 
         deuterium_cut = (vertex_z > (deuterium_z_mean - 3 * deuterium_z_sigma)) & (
             vertex_z < (deuterium_z_mean + 3 * deuterium_z_sigma)
@@ -1425,45 +1456,132 @@ def apply_target_selection(
         solid_cut = (vertex_z > (solid_z_mean - 5 * solid_z_sigma)) & (
             vertex_z < (solid_z_mean + 5 * solid_z_sigma)
         )
-        deuterium_mean_by_sector.append(deuterium_z_mean)
-        deuterium_sigma_by_sector.append(deuterium_z_sigma)
-        solid_mean_by_sector.append(solid_z_mean)
-        solid_sigma_by_sector.append(solid_z_sigma)
+
+        axs[sector].hist(vertex_z, bins=100, range=(-12, 5), histtype="step")
+        axs[sector].hist(
+            vertex_z[deuterium_cut],
+            bins=100,
+            range=(-12, 5),
+            color="b",
+            label="LD2",
+            alpha=0.8,
+        )
+        axs[sector].hist(
+            vertex_z[solid_cut],
+            bins=100,
+            range=(-12, 5),
+            color="r",
+            label=solid_target_name,
+            alpha=0.8,
+        )
+        axs[sector].set_xlabel("$v_{z}$ (cm)")
+        axs[sector].set_title(f"Sector {sector+1}")
+        axs[sector].legend(loc="upper left")
+
+    fig.tight_layout()
+    if plot_title is not None:
+        plt.suptitle(plot_title, y=1.0)
+    if plots_directory is not None:
+        plt.savefig(plots_directory + "target_selections.png")
+    plt.close()
+
+
+"""
+Selecting LD2 vs. solid target using a double Gaussian fit
+There is a develop_cuts parameter that when True, the fits are done and fit values store in a json
+If this is false (default) the fit values are loaded from the json
+"""
+
+
+def apply_target_selection(
+    events,
+    solid_target_name,
+    develop_cuts=False,
+    cut_params_path=None,
+    save_plots=True,
+    plots_directory=None,
+    plot_title=None,
+    log_file=None,
+    number_of_initial_electrons=None,
+):
+    num_sectors = 6
+    electrons = events["reconstructed"]
+
+    if develop_cuts:
+        z_fit_parameters_all_sectors = _fit_vertex_z_sectors(
+            electrons, events["pass_reco"], num_sectors
+        )
+        (
+            deuterium_mean_by_sector,
+            deuterium_sigma_by_sector,
+            solid_mean_by_sector,
+            solid_sigma_by_sector,
+        ) = _derive_target_params(z_fit_parameters_all_sectors, num_sectors)
 
         if save_plots:
-            axs[sector].hist(vertex_z, bins=100, range=(-12, 5), histtype="step")
-            axs[sector].hist(
-                vertex_z[deuterium_cut],
-                bins=100,
-                range=(-12, 5),
-                color="b",
-                label="LD2",
-                alpha=0.8,
+            _plot_zvertex_fits(
+                electrons,
+                events["pass_reco"],
+                z_fit_parameters_all_sectors,
+                num_sectors,
+                plots_directory,
+                plot_title,
             )
-            axs[sector].hist(
-                vertex_z[solid_cut],
-                bins=100,
-                range=(-12, 5),
-                color="r",
-                label=solid_target_name,
-                alpha=0.8,
+            _plot_target_selections(
+                electrons,
+                events["pass_reco"],
+                deuterium_mean_by_sector,
+                deuterium_sigma_by_sector,
+                solid_mean_by_sector,
+                solid_sigma_by_sector,
+                solid_target_name,
+                num_sectors,
+                plots_directory,
+                plot_title,
             )
 
-            axs[sector].set_xlabel("$v_{z}$ (cm)")
-            axs[sector].set_title(f"Sector {sector+1}")
-            axs[sector].legend(loc="upper left")
-    if save_plots:
-        fig.tight_layout()
-        if plot_title is not None:
-            plt.suptitle(plot_title, y=1.0)
-        if plots_directory is not None:
-            plt.savefig(plots_directory + "target_selections.png")
+        cut_params = {
+            "deuterium_mean": deuterium_mean_by_sector,
+            "deuterium_sigma": deuterium_sigma_by_sector,
+            "solid_mean": solid_mean_by_sector,
+            "solid_sigma": solid_sigma_by_sector,
+        }
+        if cut_params_path is not None:
+            with open(cut_params_path, "w") as f:
+                json.dump(cut_params, f, indent=2)
 
+    else:
+        if cut_params_path is None:
+            raise ValueError("cut_params_path is required when develop_cuts=False")
+        with open(cut_params_path, "r") as f:
+            cut_params = json.load(f)
+
+        deuterium_mean_by_sector = cut_params["deuterium_mean"]
+        deuterium_sigma_by_sector = cut_params["deuterium_sigma"]
+        solid_mean_by_sector = cut_params["solid_mean"]
+        solid_sigma_by_sector = cut_params["solid_sigma"]
+
+        if save_plots and plots_directory is not None:
+            _plot_target_selections(
+                electrons,
+                events["pass_reco"],
+                deuterium_mean_by_sector,
+                deuterium_sigma_by_sector,
+                solid_mean_by_sector,
+                solid_sigma_by_sector,
+                solid_target_name,
+                num_sectors,
+                plots_directory,
+                plot_title,
+            )
+
+    # --- apply the cut (identical in both modes, no fitting/derivation, just lookup + mask) ---
     deuterium_mask = np.ones(len(events["pass_reco"]), dtype=bool)
     solid_mask = np.ones(len(events["pass_reco"]), dtype=bool)
     for sector in range(num_sectors):
         sector_mask = electrons["sector"] == (sector + 1)
         vertex_z_in_sector = electrons["v_z"][sector_mask]
+
         deuterium_mask_in_sector = (
             vertex_z_in_sector
             > (deuterium_mean_by_sector[sector] - 3 * deuterium_sigma_by_sector[sector])
@@ -1485,20 +1603,19 @@ def apply_target_selection(
         solid_mask[sector_mask] = (events["pass_reco"][sector_mask]) & (
             solid_mask_in_sector
         )
+
         if log_file is not None:
             with open(log_file, "a") as f:
-                f.write(f"Sector {sector+1} target selection parameters:\n")
+                f.write(f"\nSector {sector+1} target selection parameters:\n")
                 f.write(
                     f"Deuterium mean (cm): {deuterium_mean_by_sector[sector]}, sigma (cm): {deuterium_sigma_by_sector[sector]}\n"
                 )
                 f.write(
                     f"{solid_target_name} mean (cm): {solid_mean_by_sector[sector]}, sigma (cm): {solid_sigma_by_sector[sector]}\n"
                 )
+                f.write("LD2 vz range (cm) | solid vz range (cm)")
                 f.write(
-                    f"Deuterium cut (cm): {deuterium_mean_by_sector[sector] - 3*deuterium_sigma_by_sector[sector]} to {deuterium_mean_by_sector[sector] + 3*deuterium_sigma_by_sector[sector]}\n"
-                )
-                f.write(
-                    f"{solid_target_name} cut (cm): {solid_mean_by_sector[sector] - 5*solid_sigma_by_sector[sector]} to {solid_mean_by_sector[sector] + 5*solid_sigma_by_sector[sector]}\n"
+                    f"${deuterium_mean_by_sector[sector] - 3*deuterium_sigma_by_sector[sector]} < v_z < {deuterium_mean_by_sector[sector] + 3*deuterium_sigma_by_sector[sector]}$ & ${solid_mean_by_sector[sector] - 5*solid_sigma_by_sector[sector]} < v_z < {solid_mean_by_sector[sector] + 5*solid_sigma_by_sector[sector]}$\n"
                 )
 
     if log_file is not None:
@@ -1506,6 +1623,7 @@ def apply_target_selection(
             f.write(
                 f"Have {ak.sum((deuterium_mask) | (solid_mask))/ak.sum(events['pass_reco'])} fraction of events after target selection cuts\n"
             )
+
     events["pass_reco"] = (deuterium_mask) | (solid_mask)
     target = np.empty(len(events), dtype=object)
     target[deuterium_mask] = "LD2"
