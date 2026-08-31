@@ -1327,6 +1327,12 @@ def apply_sampling_fraction_cut(
     return events
 
 
+def double_gaussian(x, amp1, mean1, sigma1, amp2, mean2, sigma2):
+    return amp1 * np.exp(-((x - mean1) ** 2) / (2 * sigma1)) + amp2 * np.exp(
+        -((x - mean2) ** 2) / (2 * sigma2)
+    )
+
+
 def apply_target_selection(
     events,
     solid_target_name,
