@@ -190,14 +190,6 @@ def save_output(
             with open(log_file, "a") as f:
                 f.write("saving pass reco\n")
         reconstructed_dictionary["pass_reco"] = events["pass_reco"]
-    if "pass_fiducial_and_kinematic" in events.fields:
-        print("saving fiducial and kinematic cuts")
-        if log_file is not None:
-            with open(log_file, "a") as f:
-                f.write("saving fiducial and kinematic mask\n")
-        reconstructed_dictionary["pass_fiducial_and_kinematic"] = events[
-            "pass_fiducial_and_kinematic"
-        ]
     meta = {}
     if "total_luminosity" in events.fields:
         meta["total_luminosity"] = events["total_luminosity"]

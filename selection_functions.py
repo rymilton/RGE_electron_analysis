@@ -515,7 +515,6 @@ def apply_fiducial_cuts(
                 f"Have {ak.sum(events['pass_reco'])} fraction of events after PCAL and DC fiducial cuts and kinematic cuts\n"
             )
 
-    events["pass_fiducial_and_kinematic"] = events["pass_reco"]
     events["pass_fiducial"] = fiducial_cuts
     return events
 
@@ -773,7 +772,7 @@ def apply_sampling_fraction_cut(
     edep_bins_by_sector = []
     for sector in range(num_sectors):
         sector_cut = (electrons["sector"] == (sector + 1)) & (
-            events["pass_fiducial_and_kinematic"]
+            events["pass_fiducial"]
         )
         total_ecal_energy = np.array(electrons["total_ecal_energy"][sector_cut])
         sampling_fraction = np.array(electrons["SF"][sector_cut])
@@ -962,13 +961,13 @@ def apply_sampling_fraction_cut(
                 f"Have {ak.sum(SF_mask)/number_of_initial_electrons} fraction of events after SF cuts\n"
             )
             f.write(
-                f"Have {ak.sum((events['pass_fiducial_and_kinematic']) & (SF_mask))/number_of_initial_electrons} fraction of events after fiducial,kinematic, and SF cuts\n"
+                f"Have {ak.sum((events['pass_fiducial']) & (SF_mask))/number_of_initial_electrons} fraction of events after fiducial and SF cuts\n"
             )
             f.write(
                 f"Have {ak.sum((events['pass_partial_SF']) & (SF_mask))/number_of_initial_electrons} fraction of events after partial and SF cuts\n"
             )
             f.write(
-                f"Have {ak.sum((events['pass_fiducial_and_kinematic']) & (events['pass_partial_SF']) & (SF_mask))/ak.sum((events['pass_fiducial_and_kinematic']))} fraction of events that pass fiducial and kinematic cuts after partial and SF cuts\n"
+                f"Have {ak.sum((events['pass_fiducial']) & (events['pass_partial_SF']) & (SF_mask))/ak.sum((events['pass_fiducial']))} fraction of events that pass fiducial cuts after partial and SF cuts\n"
             )
     return events
 
