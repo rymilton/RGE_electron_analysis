@@ -910,6 +910,10 @@ def gaus(x, a, mu, sigma_squared):
     return a * np.exp(-((x - mu) ** 2) / (2 * sigma_squared))
 
 
+def sf_fit_function(x, a, b, c):
+    return a + b / x + c / (x * x)
+
+
 def sf_gaussians_by_sector(
     sampling_fractions_in_sector,
     xaxis_in_sector,
