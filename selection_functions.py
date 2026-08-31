@@ -472,7 +472,7 @@ def apply_fiducial_cuts(
         ########################################################################
         distance_to_edge_low_bin = 0
         distance_to_edge_high_bin = 20
-        distance_to_edge_num_bins = 25
+        distance_to_edge_num_bins = 80
         bins = np.linspace(
             distance_to_edge_low_bin,
             distance_to_edge_high_bin,
@@ -480,36 +480,71 @@ def apply_fiducial_cuts(
         )
         bin_centers = 0.5 * (bins[:-1] + bins[1:])
 
+        chi2_ndf_bins = np.linspace(0, 100, 101)
+
         edge_cut_values = {
             "region1": DC_region1_cut,
             "region2": DC_region2_cut,
             "region3": DC_region3_cut,
         }
+        y_limits = [(0, 30), (0, 30), (0, 10)]
+
         fig, axs = plt.subplots(1, 3, figsize=(24, 7))
 
         for region_i in range(3):
             max_value = 0
             for sector in range(num_sectors):
-                sector_mask = np.array(events["reconstructed"]["sector"] == sector + 1)
+                sector_mask = (
+                    np.array(events["reconstructed"]["sector"] == sector + 1)
+                ) & (
+                    np.array(
+                        events["reconstructed"][f"DC_region{region_i+1}_x"] > -9999
+                    )
+                )
 
                 distance_to_edge = np.array(
                     events["reconstructed"][f"DC_region{region_i+1}_edge"][sector_mask]
                 )
+                # Getting chi2/NDF for all electrons in this sector
                 chi2 = np.array(events["reconstructed"]["chi2"][sector_mask])
                 ndf = np.array(events["reconstructed"]["NDF"][sector_mask])
                 chi2_per_ndf = chi2 / ndf
-                bin_indices = np.digitize(distance_to_edge, bins) - 1
 
+                # Create 2D histogram with distance_to_edge and chi2_per_ndf using matplotlib
+                # Use 50 bins for chi2_per_ndf to get good resolution
+
+                # Create temporary figure to extract histogram data
+                fig_temp = plt.figure()
+                hist_2d, distance_edges, chi2_edges, _ = plt.hist2d(
+                    distance_to_edge, chi2_per_ndf, bins=[bins, chi2_ndf_bins]
+                )
+                plt.close(fig_temp)
+
+                # Calculate weighted average chi2/ndf for each distance bin
                 bin_means = []
                 for i in range(distance_to_edge_num_bins):
-                    values_in_bin = chi2_per_ndf[bin_indices == i]
-                    if len(values_in_bin) > 0:
-                        bin_means.append(np.mean(values_in_bin))
+                    # Get the weights (counts) for this distance bin
+                    bin_counts = hist_2d[i, :]
+                    # Get the chi2/ndf bin centers for weighting
+                    chi2_bin_centers = (chi2_edges[:-1] + chi2_edges[1:]) / 2
+
+                    if np.sum(bin_counts) > 0:
+                        # Calculate weighted average
+                        weighted_avg = np.sum(bin_counts * chi2_bin_centers) / np.sum(
+                            bin_counts
+                        )
+                        bin_means.append(weighted_avg)
                     else:
                         bin_means.append(np.nan)
 
-                axs[region_i].scatter(
-                    bin_centers, bin_means, label=f"Sector {sector + 1}"
+                bin_width = bins[1] - bins[0]
+
+                axs[region_i].errorbar(
+                    bin_centers,
+                    bin_means,
+                    xerr=bin_width / 2,
+                    fmt="o",
+                    label=f"Sector {sector + 1}",
                 )
                 bin_means = np.array(bin_means)[~np.isnan(bin_means)]
                 max_bin_means = max(bin_means)
@@ -521,9 +556,11 @@ def apply_fiducial_cuts(
                 )
             axs[region_i].set_title(f"DC Region {region_i+1}")
             axs[region_i].set_xlabel("Distance to Edge (cm)")
-            axs[region_i].set_ylabel("Average χ²/NDF")
+            axs[region_i].set_ylabel("Weighted Avg. χ²/NDF")
+            axs[region_i].set_ylim(y_limits[region_i])
             axs[region_i].legend(ncols=2, loc="upper right", columnspacing=0.8)
             axs[region_i].grid(True)
+
         plt.tight_layout()
         if plot_title is not None:
             plt.suptitle(plot_title, y=1.0)
