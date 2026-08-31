@@ -314,76 +314,158 @@ def apply_fiducial_cuts(
             plt.close()
 
         ########################################################################
-        ############## Plotting the DC cuts before fiducial cuts ##############
+        ##################### Plotting the DC cuts ############################
         ########################################################################
+
+        # Function to draw the drift chamber plots
+        def plot_dc_regions(
+            events,
+            fiducial_mask,
+            hit_masks,
+            bins,
+            ranges,
+            plot_removed=False,
+            plot_title=None,
+            plots_directory=None,
+            filename="DC_after_fiducialcuts.png",
+        ):
+
+            fig, axs = plt.subplots(1, 3, figsize=(28, 10))
+
+            for i, ax in enumerate(axs, start=1):
+                if fiducial_mask is None:
+                    fiducial_mask_regioni = np.ones_like(
+                        events["reconstructed"]["DC_region1_x"], dtype=bool
+                    )
+                else:
+                    fiducial_mask_regioni = fiducial_mask[i]
+
+                x_key = f"DC_region{i}_x"
+                y_key = f"DC_region{i}_y"
+
+                x = np.array(events["reconstructed"][x_key])
+                y = np.array(events["reconstructed"][y_key])
+
+                if plot_removed:
+                    # Note that the edge variable has a sign! Even if the cut on distance to edge is 0 cm, points will still be removed
+                    removed_mask = hit_masks[i] & (~fiducial_mask_regioni)
+
+                    ax.scatter(
+                        x[removed_mask],
+                        y[removed_mask],
+                        facecolor="red",
+                        s=0.1,
+                    )
+
+                _, _, _, mesh = ax.hist2d(
+                    x[fiducial_mask_regioni],
+                    y[fiducial_mask_regioni],
+                    bins=bins[i],
+                    range=ranges[i],
+                    norm=colors.LogNorm(),
+                )
+
+                ax.set_ylabel("y (cm)")
+                ax.set_xlabel("x (cm)")
+                ax.set_title(f"DC Region {i}")
+
+                ax.set_xlim(ranges[i][0])
+                ax.set_ylim(ranges[i][1])
+
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="5%", pad=0.05)
+                fig.colorbar(mesh, cax=cax)
+
+            if plot_title is not None:
+                plt.suptitle(plot_title, y=1.0)
+
+            if plots_directory is not None:
+                plt.tight_layout()
+
+                plt.savefig(plots_directory + filename)
+
+            plt.close()
+
+        # Plotting the DC cuts
         region1_low_bin, region1_high_bin, region1_num_bins = (
             (-150, 150),
             (-150, 150),
-            (250, 250),
+            (300, 300),
         )
         region2_low_bin, region2_high_bin, region2_num_bins = (
-            (-200, 200),
-            (-200, 200),
-            (250, 250),
+            (-225, 225),
+            (-225, 225),
+            (300, 300),
         )
         region3_low_bin, region3_high_bin, region3_num_bins = (
-            (-250, 250),
-            (-250, 250),
-            (250, 250),
+            (-300, 300),
+            (-300, 300),
+            (300, 300),
         )
 
-        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
-        _, _, _, mesh = axs[0].hist2d(
-            np.array(events["reconstructed"]["DC_region1_x"]),
-            np.array(events["reconstructed"]["DC_region1_y"]),
-            bins=region1_num_bins,
-            range=(region1_low_bin, region1_high_bin),
-            norm=colors.LogNorm(),
+        DC_bins = {
+            1: region1_num_bins,
+            2: region2_num_bins,
+            3: region3_num_bins,
+        }
+
+        DC_bin_ranges = {
+            1: (region1_low_bin, region1_high_bin),
+            2: (region2_low_bin, region2_high_bin),
+            3: (region3_low_bin, region3_high_bin),
+        }
+
+        hit_masks = {
+            1: events["reconstructed"]["DC_region1_x"] > -9999,
+            2: events["reconstructed"]["DC_region2_x"] > -9999,
+            3: events["reconstructed"]["DC_region3_x"] > -9999,
+        }
+
+        region_fiducial_masks = {
+            1: DC_region1_mask,
+            2: DC_region2_mask,
+            3: DC_region3_mask,
+        }
+
+        # Plotting the DC before the fiducial cuts
+        plot_dc_regions(
+            events,
+            None,
+            hit_masks,
+            DC_bins,
+            DC_bin_ranges,
+            plot_removed=False,
+            plot_title=plot_title,
+            plots_directory=plots_directory,
+            filename="DC_before_fiducialcuts.png",
         )
-        axs[0].set_ylabel("y (cm)")
-        axs[0].set_xlabel("x (cm)")
-        axs[0].set_title("DC Region 1")
 
-        divider = make_axes_locatable(axs[0])
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        cbar = fig.colorbar(mesh, cax=cax)
-
-        _, _, _, mesh = axs[1].hist2d(
-            np.array(events["reconstructed"]["DC_region2_x"]),
-            np.array(events["reconstructed"]["DC_region2_y"]),
-            bins=region2_num_bins,
-            range=(region2_low_bin, region2_high_bin),
-            norm=colors.LogNorm(),
+        # Plotting the DC after the fiducial cuts
+        # Plot without removed points
+        plot_dc_regions(
+            events,
+            region_fiducial_masks,
+            hit_masks,
+            DC_bins,
+            DC_bin_ranges,
+            plot_removed=False,
+            plot_title=plot_title,
+            plots_directory=plots_directory,
+            filename="DC_after_fiducialcuts.png",
         )
-        axs[1].set_ylabel("y (cm)")
-        axs[1].set_xlabel("x (cm)")
-        axs[1].set_title("DC Region 2")
 
-        divider = make_axes_locatable(axs[1])
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        cbar = fig.colorbar(mesh, cax=cax)
-
-        _, _, _, mesh = axs[2].hist2d(
-            np.array(events["reconstructed"]["DC_region3_x"]),
-            np.array(events["reconstructed"]["DC_region3_y"]),
-            bins=region3_num_bins,
-            range=(region3_low_bin, region3_high_bin),
-            norm=colors.LogNorm(),
+        # Plot with removed points
+        plot_dc_regions(
+            events,
+            region_fiducial_masks,
+            hit_masks,
+            DC_bins,
+            DC_bin_ranges,
+            plot_removed=True,
+            plot_title=plot_title,
+            plots_directory=plots_directory,
+            filename="DC_after_fiducialcuts_withremovedpoints.png",
         )
-        axs[2].set_ylabel("y (cm)")
-        axs[2].set_xlabel("x (cm)")
-        axs[2].set_title("DC Region 3")
-
-        divider = make_axes_locatable(axs[2])
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        cbar = fig.colorbar(mesh, cax=cax)
-
-        plt.tight_layout()
-        if plot_title is not None:
-            plt.suptitle(plot_title, y=1.0)
-        if plots_directory is not None:
-            plt.savefig(plots_directory + "DC_before_fiducialcuts.png")
-        plt.close()
 
         ########################################################################
         ################ Plotting chi2/NDF vs distance to edge ################
@@ -447,78 +529,6 @@ def apply_fiducial_cuts(
             plt.suptitle(plot_title, y=1.0)
         if plots_directory is not None:
             plt.savefig(plots_directory + "DC_chi2NDF.png")
-        plt.close()
-
-        ########################################################################
-        ############### Plotting the DC cuts after fiducial cuts ##############
-        ########################################################################
-        region1_low_bin, region1_high_bin, region1_num_bins = (
-            (-150, 150),
-            (-150, 150),
-            (250, 250),
-        )
-        region2_low_bin, region2_high_bin, region2_num_bins = (
-            (-200, 200),
-            (-200, 200),
-            (250, 250),
-        )
-        region3_low_bin, region3_high_bin, region3_num_bins = (
-            (-250, 250),
-            (-250, 250),
-            (250, 250),
-        )
-
-        fig, axs = plt.subplots(1, 3, figsize=(18, 6))
-        _, _, _, mesh = axs[0].hist2d(
-            np.array(events["reconstructed"]["DC_region1_x"][DC_fiducial_mask]),
-            np.array(events["reconstructed"]["DC_region1_y"][DC_fiducial_mask]),
-            bins=region1_num_bins,
-            range=(region1_low_bin, region1_high_bin),
-            norm=colors.LogNorm(),
-        )
-        axs[0].set_ylabel("y (cm)")
-        axs[0].set_xlabel("x (cm)")
-        axs[0].set_title("DC Region 1")
-
-        divider = make_axes_locatable(axs[0])
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        cbar = fig.colorbar(mesh, cax=cax)
-
-        _, _, _, mesh = axs[1].hist2d(
-            np.array(events["reconstructed"]["DC_region2_x"][DC_fiducial_mask]),
-            np.array(events["reconstructed"]["DC_region2_y"][DC_fiducial_mask]),
-            bins=region2_num_bins,
-            range=(region2_low_bin, region2_high_bin),
-            norm=colors.LogNorm(),
-        )
-        axs[1].set_ylabel("y (cm)")
-        axs[1].set_xlabel("x (cm)")
-        axs[1].set_title("DC Region 2")
-
-        divider = make_axes_locatable(axs[1])
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        cbar = fig.colorbar(mesh, cax=cax)
-
-        _, _, _, mesh = axs[2].hist2d(
-            np.array(events["reconstructed"]["DC_region3_x"][DC_fiducial_mask]),
-            np.array(events["reconstructed"]["DC_region3_y"][DC_fiducial_mask]),
-            bins=region3_num_bins,
-            range=(region3_low_bin, region3_high_bin),
-            norm=colors.LogNorm(),
-        )
-        axs[2].set_ylabel("y (cm)")
-        axs[2].set_xlabel("x (cm)")
-        axs[2].set_title("DC Region 3")
-
-        divider = make_axes_locatable(axs[2])
-        cax = divider.append_axes("right", size="5%", pad=0.05)
-        cbar = fig.colorbar(mesh, cax=cax)
-
-        plt.tight_layout()
-        if plot_title is not None:
-            plt.suptitle(plot_title, y=1.0)
-        if plots_directory is not None:
-            plt.savefig(plots_directory + "DC_after_fiducialcuts.png")
         plt.close()
 
     fiducial_cuts = (PCAL_fiducial_mask) & (DC_fiducial_mask)
