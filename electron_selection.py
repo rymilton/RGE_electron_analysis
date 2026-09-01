@@ -228,6 +228,74 @@ def run_cut_pipeline(
     return events_array, number_of_initial_electrons
 
 
+def _pad_failed_trigger_events(failed_arr, n, target_selection):
+    """Explicit defaults for the fields run_cut_pipeline adds, since these
+    events skip the pipeline entirely (see run_cut_pipeline_respecting_trigger)."""
+    false_mask = np.zeros(n, dtype=np.bool_)
+    for field in (
+        "pass_reco",
+        "pass_kinematic",
+        "pass_fiducial",
+        "pass_partial_SF",
+        "pass_SF",
+    ):
+        failed_arr = ak.with_field(failed_arr, false_mask, field)
+
+    failed_arr["reconstructed"] = ak.with_field(
+        failed_arr["reconstructed"], np.full(n, -9999.0), "total_ecal_energy"
+    )
+    if target_selection:
+        failed_arr["reconstructed"] = ak.with_field(
+            failed_arr["reconstructed"], ["None"] * n, "target"
+        )
+    return failed_arr
+
+
+def run_cut_pipeline_respecting_trigger(
+    events_array, flags, parameters, plot_title, develop_cuts, save_plots
+):
+    """Only feeds events with has_trigger_electron == True into the cut
+    pipeline. If has_trigger_electron isn't in the file at all (older
+    files), falls back to running cuts on everything, unchanged from
+    before. Events that fail has_trigger_electron are kept in the output
+    as-is, tagged pass_trigger=False and backfilled with sensible defaults
+    for every field the cut pipeline would otherwise have added."""
+    if "has_trigger_electron" not in events_array["reconstructed"].fields:
+        return run_cut_pipeline(
+            events_array, flags, parameters, plot_title, develop_cuts, save_plots
+        )
+
+    number_of_initial_electrons = len(events_array)
+    events_array["pass_trigger"] = events_array["reconstructed"]["has_trigger_electron"]
+
+    # Tag original row order so it can be restored after the split/merge
+    events_array = ak.with_field(
+        events_array, np.arange(len(events_array)), "_original_index"
+    )
+
+    trigger_mask = ak.values_astype(events_array["pass_trigger"], np.bool_)
+    passed = events_array[trigger_mask]
+    failed = events_array[~trigger_mask]
+
+    passed, _ = run_cut_pipeline(
+        passed,
+        flags,
+        parameters,
+        plot_title,
+        develop_cuts,
+        save_plots,
+        number_of_initial_electrons=number_of_initial_electrons,
+    )
+
+    failed = _pad_failed_trigger_events(failed, len(failed), flags.target_selection)
+
+    combined = ak.concatenate([passed, failed])
+    combined = combined[ak.argsort(combined["_original_index"])]
+    combined = combined[[f for f in combined.fields if f != "_original_index"]]
+
+    return combined, number_of_initial_electrons
+
+
 def main():
     flags = parse_arguments()
 
