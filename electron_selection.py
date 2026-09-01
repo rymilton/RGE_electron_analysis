@@ -7,6 +7,45 @@ import concurrent.futures as cf
 from utils import LoadYaml, open_data, save_output, CSV_to_df
 from selection_functions import *
 
+# Everything selection_functions.py's cut functions and diagnostic plots
+# actually read from events["reconstructed"] (verified by grepping the file
+# directly), plus has_trigger_electron/pass_status which electron_selection.py
+# itself needs for pipeline gating and the status cut. Used to keep Pass 1's
+# combined open cheap -- it only needs to drive cuts/plots, not produce
+# output. If ELECTRON_KINEMATIC_CUTS/ELECTRON_FIDUCIAL_CUTS in config.yaml
+# ever reference a field outside this list, it'll need updating too.
+PASS1_BRANCHES_TO_OPEN = [
+    "has_trigger_electron",
+    "pass_status",
+    "Q2",
+    "y",
+    "W",
+    "x",
+    "PCAL_U",
+    "PCAL_V",
+    "PCAL_W",
+    "PCAL_x",
+    "PCAL_y",
+    "DC_region1_x",
+    "DC_region1_y",
+    "DC_region1_edge",
+    "DC_region2_x",
+    "DC_region2_y",
+    "DC_region2_edge",
+    "DC_region3_x",
+    "DC_region3_y",
+    "DC_region3_edge",
+    "chi2",
+    "NDF",
+    "sector",
+    "E_PCAL",
+    "E_ECIN",
+    "E_ECOUT",
+    "SF",
+    "p",
+    "v_z",
+]
+
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
@@ -386,13 +425,11 @@ def main():
     print(f"Combining {len(input_files)} file(s) for diagnostics...")
     events_array = open_data(
         data_paths=input_files,
-        branches_to_open=parameters["BRANCHES_TO_SAVE"],
+        branches_to_open=PASS1_BRANCHES_TO_OPEN,
         data_tree_name="reconstructed_electrons",
-        open_gen=flags.save_gen,
-        gen_branches_to_open=(
-            parameters["GEN_BRANCHES_TO_SAVE"] if flags.save_gen else None
-        ),
-        gen_tree_name="gen_electrons",
+        # No cut function or diagnostic plot uses gen data -- Pass 1 never
+        # needs it, regardless of --save_gen (that's a Pass 2/output concern).
+        open_gen=False,
         nmax=flags.nmax,
         log_file=flags.log_file,
     )
