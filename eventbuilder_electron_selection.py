@@ -4,13 +4,16 @@ import os
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from utils import LoadYaml, open_data, save_output
 
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
         "--input_file",
         nargs="+",
-        default=["/home/rmilton/work_dir/rge_datasets/job_9586_LD2Csolid_clasdis_deuteron_zh0_3k/ntuples_LD2Csolid_clasdis_deuteron_zh0_3000files.root"],
+        default=[
+            "/home/rmilton/work_dir/rge_datasets/job_9586_LD2Csolid_clasdis_deuteron_zh0_3k/ntuples_LD2Csolid_clasdis_deuteron_zh0_3000files.root"
+        ],
         help="ROOT file(s) containing tuples from tuple_maker",
         type=str,
     )
@@ -62,7 +65,8 @@ def get_eventbuilder_electrons(events):
     # Pull these out before masking -- they're already flat, unlike every other
     # "reconstructed" field.
     event_level_values = {
-        field: events["reconstructed"][field] for field in RECONSTRUCTED_EVENT_LEVEL_FIELDS
+        field: events["reconstructed"][field]
+        for field in RECONSTRUCTED_EVENT_LEVEL_FIELDS
     }
 
     # 1. Create a mask at the particle level (avoids pid[:, 0] crashes)
@@ -73,10 +77,13 @@ def get_eventbuilder_electrons(events):
 
     # 2. Filter particles, keeping the jagged event structure intact
     track_level_fields = [
-        field for field in events["reconstructed"].fields
+        field
+        for field in events["reconstructed"].fields
         if field not in RECONSTRUCTED_EVENT_LEVEL_FIELDS
     ]
-    jagged_electrons = events["reconstructed"][track_level_fields][trigger_electron_mask]
+    jagged_electrons = events["reconstructed"][track_level_fields][
+        trigger_electron_mask
+    ]
 
     # 3. Count trigger electrons per event to build the flag
     number_of_electrons = ak.sum(trigger_electron_mask, axis=1)
@@ -93,7 +100,9 @@ def get_eventbuilder_electrons(events):
     electrons = ak.zip(flat_fields, depth_limit=1)
 
     # 5. Sampling Fraction computed from the now-flat fields; -9999 where it doesn't pass
-    sf_raw = (electrons["E_PCAL"] + electrons["E_ECOUT"] + electrons["E_ECIN"]) / electrons["p"]
+    sf_raw = (
+        electrons["E_PCAL"] + electrons["E_ECOUT"] + electrons["E_ECIN"]
+    ) / electrons["p"]
     sf = ak.where(pass_status, sf_raw, -9999.0)
     electrons = ak.with_field(electrons, sf, "SF")
 
@@ -107,6 +116,7 @@ def get_eventbuilder_electrons(events):
 
     return events
 
+
 def get_gen_electrons(events):
     # Same as get_eventbuilder_electrons() above -- pull flat fields out first.
     event_level_values = {
@@ -116,7 +126,7 @@ def get_gen_electrons(events):
         field for field in events["gen"].fields if field not in GEN_EVENT_LEVEL_FIELDS
     ]
 
-    events["gen"] = events["gen"][particle_level_fields][events["gen"]["gen_pid"]==11]
+    events["gen"] = events["gen"][particle_level_fields][events["gen"]["gen_pid"] == 11]
 
     # Keep the first -- assumed highest-pz (scattered) electron; secondaries are < .5 GeV
     events["gen"] = events["gen"][:, 0]
@@ -126,22 +136,26 @@ def get_gen_electrons(events):
 
     return events
 
+
 def derive_output_file_name(input_file):
     stem = os.path.basename(input_file)
     if stem.endswith(".root"):
         stem = stem[: -len(".root")]
     if stem.startswith("ntuples_"):
-        stem = stem[len("ntuples_"):]
+        stem = stem[len("ntuples_") :]
     return f"electrons_eventbuilder_{stem}.root"
+
 
 def single_file_eventbuilder_selection(input_file, flags, parameters):
     events_array = open_data(
-        data_paths = [input_file],
-        branches_to_open = parameters["BRANCHES_TO_OPEN"],
-        data_tree_name = "reconstructed",
-        open_gen = flags.save_gen,
-        gen_branches_to_open = parameters["GEN_BRANCHES_TO_OPEN"] if flags.save_gen else None,
-        gen_tree_name = "gen",
+        data_paths=[input_file],
+        branches_to_open=parameters["BRANCHES_TO_OPEN"],
+        data_tree_name="reconstructed",
+        open_gen=flags.save_gen,
+        gen_branches_to_open=(
+            parameters["GEN_BRANCHES_TO_OPEN"] if flags.save_gen else None
+        ),
+        gen_tree_name="gen",
     )
 
     events_array = get_eventbuilder_electrons(events_array)
@@ -155,12 +169,14 @@ def single_file_eventbuilder_selection(input_file, flags, parameters):
         derive_output_file_name(input_file),
         parameters["BRANCHES_TO_SAVE"],
         flags.save_gen,
-        parameters["GEN_BRANCHES_TO_SAVE"] if flags.save_gen else None)
+        parameters["GEN_BRANCHES_TO_SAVE"] if flags.save_gen else None,
+    )
+
 
 def main():
     flags = parse_arguments()
 
-    parameters = LoadYaml(os.path.join(flags.config_directory, flags.config))
+    parameters = LoadYaml(flags.config, base_path=flags.config_directory)
 
     njobs = max(1, min(flags.num_processes, len(flags.input_file)))
 
@@ -174,7 +190,9 @@ def main():
     else:
         with ProcessPoolExecutor(max_workers=njobs) as executor:
             futures = {
-                executor.submit(single_file_eventbuilder_selection, input_file, flags, parameters): input_file
+                executor.submit(
+                    single_file_eventbuilder_selection, input_file, flags, parameters
+                ): input_file
                 for input_file in flags.input_file
             }
             for future in as_completed(futures):
@@ -184,6 +202,7 @@ def main():
                     print(f"Done: {input_file}")
                 except Exception as e:
                     print(f"FAILED: {input_file}: {e}")
+
 
 if __name__ == "__main__":
     main()
