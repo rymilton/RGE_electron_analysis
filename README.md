@@ -43,7 +43,7 @@ It's easier (in my opinion) to work with .root files rather than .hipo files. Th
 
 To run this converter, the script needs to be compiled first. On ifarm, you can do this with 
 ```
-g++ hipo2root.cxx -o hipo2root -I/u/scigroup/cvmfs/hallb/clas12/sw/almalinux9-gcc11/local/hipo/4.2.0/include/hipo4 -L/u/scigroup/cvmfs/hallb/clas12/sw/almalinux9-gcc11/local/hipo/4.2.0/lib  `-lhipo4 root-config --cflags --libs`
+g++ hipo2root.cxx -o hipo2root -I/u/scigroup/cvmfs/hallb/clas12/sw/almalinux9-gcc11/local/hipo/4.2.0/include/hipo4 -L/u/scigroup/cvmfs/hallb/clas12/sw/almalinux9-gcc11/local/hipo/4.2.0/lib -lhipo4 $(root-config --cflags --libs)
 ```
 ### Tuple maker
 `tuple_maker.cpp` takes .root files as input and extracts the quantities that are relevant to this analysis. Every particle in each event is stored. The quantities that are stored can be seen in [these lines](https://github.com/rymilton/RGE_electron_analysis/blob/main/tuple_maker.cpp#L85-L98). In addition to these, the charge from the Faraday cup (fcupgated) and run number are saved. If desired, the Monte Carlo information for each particle is also saved. To run the code, do `root -l -b -q "tuple_maker.cpp+(\"${banks_directory}\", \"banks_${file_num}.root\", \"${tuples_directory}\", \"ntuples_${file_num}.root\", 0)"` where `${banks_directory}` and `banks_${file_num}.root` are the directory and file for the .root file after converting from .hipo, respectively. `${tuples_directory}` and `ntuples_${file_num}.root` are the output directory and output file, respectively. The final argument is `0` if you don't want to save Monte Carlo the information and `1` if you want to save it. This option should only be set to `1` if you're working with simulation files. 
