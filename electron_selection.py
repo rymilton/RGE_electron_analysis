@@ -296,6 +296,71 @@ def run_cut_pipeline_respecting_trigger(
     return combined, number_of_initial_electrons
 
 
+def add_luminosity_info(events_array, flags):
+    if flags.simulation:
+        return events_array
+    run_info_df = CSV_to_df(flags.run_info_file)
+    selected_run_info = run_info_df[run_info_df["Run_Number"] == flags.run_number]
+    luminosity = selected_run_info["Integrated_Luminosity"].iloc[0]
+    total_num_events = selected_run_info["Num_Events"].iloc[0]
+    events_array["total_luminosity"] = luminosity
+    events_array["total_num_events"] = total_num_events
+    fraction_of_events = np.sum(events_array["pass_reco"]) / total_num_events
+    events_array["luminosity_after_cuts"] = fraction_of_events * luminosity
+    events_array["run_number"] = flags.run_number
+    return events_array
+
+
+def derive_output_file_name(path):
+    base_name = os.path.splitext(os.path.basename(path))[0]
+    if base_name.startswith("electrons_eventbuilder_"):
+        base_name = base_name[len("electrons_eventbuilder_") :]
+    return f"candidate_electrons_{base_name}.root"
+
+
+def apply_and_save_one_file(path, flags, parameters, plot_title):
+    """Pass 2: opens one file on its own, applies the already-known cuts
+    (develop_cuts=False -- the cut JSONs are guaranteed to exist by now,
+    whether freshly fit or pre-existing) without making any plots (those
+    were already made from the combined array in pass 1), and saves."""
+    events_array = open_data(
+        data_paths=path,
+        branches_to_open=parameters["BRANCHES_TO_SAVE"],
+        data_tree_name="reconstructed_electrons",
+        open_gen=flags.save_gen,
+        gen_branches_to_open=(
+            parameters["GEN_BRANCHES_TO_SAVE"] if flags.save_gen else None
+        ),
+        gen_tree_name="gen_electrons",
+        nmax=flags.nmax,
+        log_file=flags.log_file,
+    )
+    events_array, _ = run_cut_pipeline_respecting_trigger(
+        events_array,
+        flags,
+        parameters,
+        plot_title,
+        develop_cuts=False,
+        save_plots=False,
+    )
+    events_array = add_luminosity_info(events_array, flags)
+
+    if flags.input_file_array is not None:
+        output_file = derive_output_file_name(path)
+    else:
+        output_file = flags.output_file
+
+    save_output(
+        events_array,
+        flags.output_directory,
+        output_file,
+        parameters["ELECTRON_SELECTION_BRANCHES_TO_SAVE"],
+        flags.save_gen,
+        parameters["GEN_BRANCHES_TO_SAVE"] if flags.save_gen else None,
+    )
+    return output_file
+
+
 def main():
     flags = parse_arguments()
 
