@@ -47,6 +47,8 @@ BRANCHES_TO_SAVE:
   - p_z
   - p
   - status
+  - has_trigger_electron
+  - pass_status
   - v_x
   - v_y
   - v_z
@@ -116,6 +118,7 @@ ELECTRON_SELECTION_BRANCHES_TO_SAVE:
   - y
   - W
   - target
+  - pass_status
 
 GEN_BRANCHES_TO_OPEN:
   - gen_pid
