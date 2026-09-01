@@ -17,6 +17,13 @@ def LoadYaml(file_name, base_path="../configs"):
     return yaml.safe_load(open(yaml_path))
 
 
+def _downcast_float64(arrays):
+    for field in arrays.fields:
+        if "float64" in str(ak.type(arrays[field])):
+            arrays[field] = ak.values_astype(arrays[field], np.float32)
+    return arrays
+
+
 def open_data(
     data_paths,
     branches_to_open,
@@ -57,11 +64,13 @@ def open_data(
                     with open(log_file, "a") as f:
                         f.write(f"Opening reconstructed data from {data_path}\n")
                 if nmax is not None:
-                    arrays = file.arrays(
-                        filter_name=branches_to_open,
-                        entry_start=0,
-                        entry_stop=remaining_events,
-                        library="ak",
+                    arrays = _downcast_float64(
+                        file.arrays(
+                            filter_name=branches_to_open,
+                            entry_start=0,
+                            entry_stop=remaining_events,
+                            library="ak",
+                        )
                     )
                     event_dictionary["reconstructed"] = ak.concatenate(
                         (event_dictionary["reconstructed"], arrays)
@@ -71,11 +80,11 @@ def open_data(
                         f"{nmax-(remaining_events - num_events_in_file)}/{nmax} reco events loaded"
                     )
                 else:
+                    arrays = _downcast_float64(
+                        file.arrays(filter_name=branches_to_open, library="ak")
+                    )
                     event_dictionary["reconstructed"] = ak.concatenate(
-                        (
-                            event_dictionary["reconstructed"],
-                            file.arrays(filter_name=branches_to_open, library="ak"),
-                        )
+                        (event_dictionary["reconstructed"], arrays)
                     )
         if open_gen:
             with uproot.open(data_path + f":{gen_tree_name}") as file:
@@ -84,26 +93,26 @@ def open_data(
                     with open(log_file, "a") as f:
                         f.write(f"Opening gen data from {data_path}\n")
                 if nmax is not None:
-                    event_dictionary["gen"] = ak.concatenate(
-                        (
-                            event_dictionary["gen"],
-                            file.arrays(
-                                filter_name=gen_branches_to_open,
-                                entry_start=0,
-                                entry_stop=remaining_events,
-                                library="ak",
-                            ),
+                    arrays = _downcast_float64(
+                        file.arrays(
+                            filter_name=gen_branches_to_open,
+                            entry_start=0,
+                            entry_stop=remaining_events,
+                            library="ak",
                         )
+                    )
+                    event_dictionary["gen"] = ak.concatenate(
+                        (event_dictionary["gen"], arrays)
                     )
                     print(
                         f"{nmax-(remaining_events - num_events_in_file)}/{nmax} gen events loaded"
                     )
                 else:
+                    arrays = _downcast_float64(
+                        file.arrays(filter_name=gen_branches_to_open, library="ak")
+                    )
                     event_dictionary["gen"] = ak.concatenate(
-                        (
-                            event_dictionary["gen"],
-                            file.arrays(filter_name=gen_branches_to_open, library="ak"),
-                        )
+                        (event_dictionary["gen"], arrays)
                     )
         if get_meta_info:
             with uproot.open(data_path + f":meta_info") as file:
@@ -112,37 +121,37 @@ def open_data(
                     with open(log_file, "a") as f:
                         f.write(f"Opening meta data from {data_path}\n")
                 if nmax is not None:
-                    event_dictionary["meta_info"] = ak.concatenate(
-                        (
-                            event_dictionary["meta_info"],
-                            file.arrays(
-                                filter_name=[
-                                    "total_luminosity",
-                                    "total_num_events",
-                                    "luminosity_after_cuts",
-                                ],
-                                entry_start=0,
-                                entry_stop=remaining_events,
-                                library="ak",
-                            ),
+                    arrays = _downcast_float64(
+                        file.arrays(
+                            filter_name=[
+                                "total_luminosity",
+                                "total_num_events",
+                                "luminosity_after_cuts",
+                            ],
+                            entry_start=0,
+                            entry_stop=remaining_events,
+                            library="ak",
                         )
+                    )
+                    event_dictionary["meta_info"] = ak.concatenate(
+                        (event_dictionary["meta_info"], arrays)
                     )
                     print(
                         f"{nmax-(remaining_events - num_events_in_file)}/{nmax} meta events loaded"
                     )
                 else:
-                    event_dictionary["meta_info"] = ak.concatenate(
-                        (
-                            event_dictionary["meta_info"],
-                            file.arrays(
-                                filter_name=[
-                                    "total_luminosity",
-                                    "total_num_events",
-                                    "luminosity_after_cuts",
-                                ],
-                                library="ak",
-                            ),
+                    arrays = _downcast_float64(
+                        file.arrays(
+                            filter_name=[
+                                "total_luminosity",
+                                "total_num_events",
+                                "luminosity_after_cuts",
+                            ],
+                            library="ak",
                         )
+                    )
+                    event_dictionary["meta_info"] = ak.concatenate(
+                        (event_dictionary["meta_info"], arrays)
                     )
         if nmax is not None:
             remaining_events -= num_events_in_file
