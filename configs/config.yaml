@@ -156,18 +156,15 @@ GEN_BRANCHES_TO_SAVE:
 
 ELECTRON_KINEMATIC_CUTS:
   - Q2 > 1
-  - y < 0.8
+  - y < 0.85
   - W > 2
-  - theta_degrees > 5
-  - p > 2
-  - p < 8
 
 ELECTRON_FIDUCIAL_CUTS:
-  - PCAL_W > 14
-  - PCAL_V > 14
-  - DC_region1_edge > 4.5
-  - DC_region2_edge > 3.5
-  - DC_region3_edge > 7.5
+  - PCAL_W > 9
+  - PCAL_V > 9
+  - DC_region1_edge > 2.3
+  - DC_region2_edge > 2.3
+  - DC_region3_edge > 5.7
 
 # By default, all plots will have "RGE LD2 + solid target"
 PLOT_TITLES:
