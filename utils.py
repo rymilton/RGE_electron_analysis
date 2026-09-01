@@ -184,12 +184,13 @@ def save_output(
                     f.write(f"{field} not in reconstructed particles. Skipping\n")
             continue
         reconstructed_dictionary[field] = events["reconstructed"][field]
-    if "pass_reco" in events.fields:
-        print("saving pass reco")
-        if log_file is not None:
-            with open(log_file, "a") as f:
-                f.write("saving pass reco\n")
-        reconstructed_dictionary["pass_reco"] = events["pass_reco"]
+    for field in events.fields:
+        if field.startswith("pass_"):
+            print(f"saving {field}")
+            if log_file is not None:
+                with open(log_file, "a") as f:
+                    f.write(f"saving {field}\n")
+            reconstructed_dictionary[field] = events[field]
     meta = {}
     if "total_luminosity" in events.fields:
         meta["total_luminosity"] = events["total_luminosity"]
