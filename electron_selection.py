@@ -144,6 +144,90 @@ def get_plot_title(flags, parameters):
         return f"RGE LD2 + {flags.solid_target} : {flags.run_number} Pass 1"
 
 
+def get_input_files(flags):
+    if flags.input_file_array is not None:
+        return flags.input_file_array
+    return [flags.input_file]
+
+
+def run_cut_pipeline(
+    events_array,
+    flags,
+    parameters,
+    plot_title,
+    develop_cuts,
+    save_plots,
+    number_of_initial_electrons=None,
+):
+    """Runs the full kinematic/fiducial/partial-SF/SF/status/target cut
+    pipeline on whatever array it's given. develop_cuts toggles whether the
+    fit-based cut functions (partial sampling, sampling fraction, target)
+    re-fit from this data or load previously-cached cut parameters.
+    save_plots is explicit (rather than read from flags) so callers can force
+    plotting off independent of the top-level --save_plots flag."""
+    if number_of_initial_electrons is None:
+        number_of_initial_electrons = len(events_array)
+
+    events_array = apply_kinematic_cuts(
+        events_array,
+        parameters["ELECTRON_KINEMATIC_CUTS"],
+        save_plots=save_plots,
+        plots_directory=flags.plots_directory,
+        plot_title=plot_title,
+        log_file=flags.log_file,
+        number_of_initial_electrons=number_of_initial_electrons,
+    )
+    events_array = apply_fiducial_cuts(
+        events=events_array,
+        fiducial_cuts=parameters["ELECTRON_FIDUCIAL_CUTS"],
+        save_plots=save_plots,
+        plots_directory=flags.plots_directory,
+        plot_title=plot_title,
+        log_file=flags.log_file,
+        number_of_initial_electrons=number_of_initial_electrons,
+    )
+    events_array = apply_partial_sampling_fraction_cut(
+        events=events_array,
+        develop_cuts=develop_cuts,
+        cut_params_path=os.path.join(flags.cut_directory, "partial_sampling.json"),
+        is_simulation=flags.simulation,
+        save_plots=save_plots,
+        plots_directory=flags.plots_directory,
+        plot_title=plot_title,
+        log_file=flags.log_file,
+        number_of_initial_electrons=number_of_initial_electrons,
+    )
+    events_array = apply_sampling_fraction_cut(
+        events=events_array,
+        develop_cuts=develop_cuts,
+        cut_params_path=os.path.join(flags.cut_directory, "sampling_fraction.json"),
+        save_plots=save_plots,
+        plots_directory=flags.plots_directory,
+        plot_title=plot_title,
+        log_file=flags.log_file,
+        number_of_initial_electrons=number_of_initial_electrons,
+    )
+    events_array = apply_status_cut(
+        events_array,
+        log_file=flags.log_file,
+        number_of_initial_electrons=number_of_initial_electrons,
+    )
+    if flags.target_selection:
+        events_array = apply_target_selection(
+            events=events_array,
+            solid_target_name=flags.solid_target,
+            develop_cuts=develop_cuts,
+            cut_params_path=os.path.join(flags.cut_directory, "target.json"),
+            save_plots=save_plots,
+            plots_directory=flags.plots_directory,
+            plot_title=plot_title,
+            log_file=flags.log_file,
+            number_of_initial_electrons=number_of_initial_electrons,
+        )
+
+    return events_array, number_of_initial_electrons
+
+
 def main():
     flags = parse_arguments()
 
