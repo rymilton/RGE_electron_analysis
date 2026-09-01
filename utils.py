@@ -178,10 +178,11 @@ def save_output(
     reconstructed_fields = events["reconstructed"].fields
     for field in branches_to_save:
         if field not in reconstructed_fields:
-            print(f"{field} not in reconstructed particles. Skipping")
-            if log_file is not None:
-                with open(log_file, "a") as f:
-                    f.write(f"{field} not in reconstructed particles. Skipping\n")
+            if field not in events.fields:
+                print(f"{field} not in reconstructed particles. Skipping")
+                if log_file is not None:
+                    with open(log_file, "a") as f:
+                        f.write(f"{field} not in reconstructed particles. Skipping\n")
             continue
         reconstructed_dictionary[field] = events["reconstructed"][field]
     for field in events.fields:
