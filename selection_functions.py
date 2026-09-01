@@ -1414,6 +1414,19 @@ def apply_sampling_fraction_cut(
     return events
 
 
+def apply_status_cut(events, log_file=None, number_of_initial_electrons=None):
+    events["pass_reco"] = events["pass_reco"] & events["reconstructed"]["pass_status"]
+
+    print(f"Have {ak.sum(events['pass_reco'])} events after status cut")
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(f"Have {ak.sum(events['pass_reco'])} events after status cut\n")
+            f.write(
+                f"Have {ak.sum(events['pass_reco'])/number_of_initial_electrons} fraction of events after status cut\n"
+            )
+    return events
+
+
 def double_gaussian(x, amp1, mean1, sigma1, amp2, mean2, sigma2):
     return amp1 * np.exp(-((x - mean1) ** 2) / (2 * sigma1)) + amp2 * np.exp(
         -((x - mean2) ** 2) / (2 * sigma2)
