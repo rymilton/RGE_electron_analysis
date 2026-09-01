@@ -123,35 +123,37 @@ void process_single_file(
 
     // Output branches: A vector of particles for each event
     // Kinematic and track quantities for each particle
-    std::vector<double> beta, chi2pid, px, py, pz, p, vt, vx, vy, vz, theta, phi, theta_degrees, phi_degrees;
+    // float, not double -- the underlying HIPO/hipo2root.cxx data is already
+    // float32, so double here would just widen it for no precision gained.
+    std::vector<float> beta, chi2pid, px, py, pz, p, vt, vx, vy, vz, theta, phi, theta_degrees, phi_degrees;
     std::vector<int> charge, pid, status;
     std::vector<int> track_charge, sector, track_ndf;
-    std::vector<double> track_chi2;
+    std::vector<float> track_chi2;
 
     // FMT Track information
-    std::vector<double> ftrack_px, ftrack_py, ftrack_pz, ftrack_vx, ftrack_vy, ftrack_vz, ftrack_chi2;
+    std::vector<float> ftrack_px, ftrack_py, ftrack_pz, ftrack_vx, ftrack_vy, ftrack_vz, ftrack_chi2;
     std::vector<int> ftrack_sector, ftrack_status;
 
     // Detector info for each particle
-    std::vector<double> E_PCAL, E_ECIN, E_ECOUT;
-    std::vector<double> PCAL_U, PCAL_V, PCAL_W;
-    std::vector<double> PCAL_x, PCAL_y, PCAL_z, PCAL_edge;
+    std::vector<float> E_PCAL, E_ECIN, E_ECOUT;
+    std::vector<float> PCAL_U, PCAL_V, PCAL_W;
+    std::vector<float> PCAL_x, PCAL_y, PCAL_z, PCAL_edge;
     std::vector<int> Nphe_HTCC, Nphe_LTCC;
-    std::vector<double> DC_region1_x, DC_region1_y, DC_region1_z, DC_region1_edge;
-    std::vector<double> DC_region2_x, DC_region2_y, DC_region2_z, DC_region2_edge;
-    std::vector<double> DC_region3_x, DC_region3_y, DC_region3_z, DC_region3_edge;
+    std::vector<float> DC_region1_x, DC_region1_y, DC_region1_z, DC_region1_edge;
+    std::vector<float> DC_region2_x, DC_region2_y, DC_region2_z, DC_region2_edge;
+    std::vector<float> DC_region3_x, DC_region3_y, DC_region3_z, DC_region3_edge;
 
     // Event-level DIS quantities
-    double Q2, nu, x, y, W;
+    float Q2, nu, x, y, W;
     bool has_trigger_electron;
 
-    double fcupgated;
+    float fcupgated;
     int run_number, event_number, num_tracks;
 
     std::vector<int> gen_pid;
-    std::vector<double> gen_px, gen_py, gen_pz, gen_vx, gen_vy, gen_vz, gen_vt;
-    std::vector<double> gen_p, gen_theta, gen_phi, gen_theta_degrees, gen_phi_degrees;
-    double gen_Q2, gen_nu, gen_x, gen_y, gen_W;
+    std::vector<float> gen_px, gen_py, gen_pz, gen_vx, gen_vy, gen_vz, gen_vt;
+    std::vector<float> gen_p, gen_theta, gen_phi, gen_theta_degrees, gen_phi_degrees;
+    float gen_Q2, gen_nu, gen_x, gen_y, gen_W;
 
     outTree_reconstructed->Branch("beta", &beta);
     outTree_reconstructed->Branch("charge", &charge);
