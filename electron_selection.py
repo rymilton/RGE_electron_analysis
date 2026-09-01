@@ -1,11 +1,9 @@
 import argparse
 import uproot
-import glob
 import awkward as ak
 import numpy as np
-import time
-import h5py as h5
 import os
+import concurrent.futures as cf
 from utils import LoadYaml, open_data, save_output, CSV_to_df
 from selection_functions import *
 
@@ -127,6 +125,12 @@ def parse_arguments():
         default="./cuts/C_D2/",
         help="Name of the directory containing the cut json files",
         type=str,
+    )
+    parser.add_argument(
+        "--num_processes",
+        default=4,
+        help="Number of processes to use when applying cuts to each input file in parallel",
+        type=int,
     )
 
     flags = parser.parse_args()
@@ -366,14 +370,22 @@ def main():
 
     if flags.log_file is not None:
         open(flags.log_file, "w").close()  # Clear log file at start
-    # Open data
     parameters = LoadYaml(flags.config, flags.config_directory)
-    if flags.input_file_array is not None:
-        input_data = flags.input_file_array
-    else:
-        input_data = flags.input_file
+    os.makedirs(flags.cut_directory, exist_ok=True)
+    if flags.save_plots:
+        os.makedirs(flags.plots_directory, exist_ok=True)
+
+    input_files = get_input_files(flags)
+    plot_title = get_plot_title(flags, parameters)
+
+    # Pass 1: combine all input files, run the cut pipeline once so the
+    # diagnostic plots reflect the whole run's combined statistics and (if
+    # --develop_cuts) the cut parameters are fit from the full combined
+    # dataset. Nothing from this pass is saved -- it exists only to drive
+    # plots and cut development.
+    print(f"Combining {len(input_files)} file(s) for diagnostics...")
     events_array = open_data(
-        data_paths=input_data,
+        data_paths=input_files,
         branches_to_open=parameters["BRANCHES_TO_SAVE"],
         data_tree_name="reconstructed_electrons",
         open_gen=flags.save_gen,
@@ -384,87 +396,47 @@ def main():
         nmax=flags.nmax,
         log_file=flags.log_file,
     )
-    num_EB_electrons = len(events_array)
-    os.makedirs(flags.cut_directory, exist_ok=True)
-    if flags.save_plots:
-        os.makedirs(flags.plots_directory, exist_ok=True)
-    plot_title = get_plot_title(flags, parameters)
-    # Apply DIS cuts and other basic cuts
-    events_array = apply_kinematic_cuts(
+    events_array, number_of_initial_electrons = run_cut_pipeline_respecting_trigger(
         events_array,
-        parameters["ELECTRON_KINEMATIC_CUTS"],
-        save_plots=flags.save_plots,
-        plots_directory=flags.plots_directory,
-        plot_title=plot_title,
-        log_file=flags.log_file,
-        number_of_initial_electrons=num_EB_electrons,
-    )
-    # Apply fiducial cuts
-    events_array = apply_fiducial_cuts(
-        events=events_array,
-        fiducial_cuts=parameters["ELECTRON_FIDUCIAL_CUTS"],
-        save_plots=flags.save_plots,
-        plots_directory=flags.plots_directory,
-        plot_title=plot_title,
-        log_file=flags.log_file,
-        number_of_initial_electrons=num_EB_electrons,
-    )
-
-    # Apply partial sampling fraction cuts
-    events_array = apply_partial_sampling_fraction_cut(
-        events=events_array,
+        flags,
+        parameters,
+        plot_title,
         develop_cuts=flags.develop_cuts,
-        cut_params_path=os.path.join(flags.cut_directory, "partial_sampling.json"),
-        is_simulation=flags.simulation,
         save_plots=flags.save_plots,
-        plots_directory=flags.plots_directory,
-        plot_title=plot_title,
-        log_file=flags.log_file,
-        number_of_initial_electrons=num_EB_electrons,
     )
-    # Apply SF cuts
-    events_array = apply_sampling_fraction_cut(
-        events=events_array,
-        develop_cuts=flags.develop_cuts,
-        cut_params_path=os.path.join(flags.cut_directory, "sampling_fraction.json"),
-        save_plots=flags.save_plots,
-        plots_directory=flags.plots_directory,
-        plot_title=plot_title,
-        log_file=flags.log_file,
-        number_of_initial_electrons=num_EB_electrons,
-    )
-
-    if flags.target_selection:
-        events_array = apply_target_selection(
-            events=events_array,
-            solid_target_name=flags.solid_target,
-            develop_cuts=flags.develop_cuts,
-            cut_params_path=os.path.join(flags.cut_directory, "target.json"),
-            save_plots=flags.save_plots,
-            plots_directory=flags.plots_directory,
-            plot_title=plot_title,
-            log_file=flags.log_file,
-            number_of_initial_electrons=num_EB_electrons,
+    if flags.develop_cuts:
+        print(
+            f"Cuts developed and saved to {flags.cut_directory} "
+            f"({ak.sum(events_array['pass_reco'])}/{number_of_initial_electrons} pass after all cuts)"
         )
-    # Calculating integrated luminosity within file
-    if not flags.simulation:
-        run_info_df = CSV_to_df(flags.run_info_file)
-        selected_run_info = run_info_df[run_info_df["Run_Number"] == flags.run_number]
-        luminosity = selected_run_info["Integrated_Luminosity"].iloc[0]
-        total_num_events = selected_run_info["Num_Events"].iloc[0]
-        events_array["total_luminosity"] = luminosity
-        events_array["total_num_events"] = total_num_events
-        fraction_of_events = np.sum(events_array["pass_reco"]) / total_num_events
-        events_array["luminosity_after_cuts"] = fraction_of_events * luminosity
-    # Save the cut electrons. Should have the option to cut on targets or not
-    save_output(
-        events_array,
-        flags.output_directory,
-        flags.output_file,
-        parameters["ELECTRON_SELECTION_BRANCHES_TO_SAVE"],
-        flags.save_gen,
-        parameters["GEN_BRANCHES_TO_SAVE"] if flags.save_gen else None,
-    )
+    del events_array  # combined array was only used for diagnostics/fitting above
+
+    # Pass 2: apply the now-known cuts to each input file independently, in
+    # parallel, saving one output file per input file.
+    os.makedirs(flags.output_directory, exist_ok=True)
+    njobs = max(1, min(flags.num_processes, len(input_files)))
+    if njobs == 1:
+        for path in input_files:
+            try:
+                output_file = apply_and_save_one_file(path, flags, parameters, plot_title)
+                print(f"Saved {output_file}")
+            except Exception as e:
+                print(f"FAILED: {path}: {e}")
+    else:
+        with cf.ProcessPoolExecutor(max_workers=njobs) as executor:
+            futures = {
+                executor.submit(
+                    apply_and_save_one_file, path, flags, parameters, plot_title
+                ): path
+                for path in input_files
+            }
+            for future in cf.as_completed(futures):
+                path = futures[future]
+                try:
+                    output_file = future.result()
+                    print(f"Saved {output_file}")
+                except Exception as e:
+                    print(f"FAILED: {path}: {e}")
 
 
 if __name__ == "__main__":
