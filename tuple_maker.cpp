@@ -302,8 +302,8 @@ void process_single_file(
         if (!save_gen)
         {
             fcupgated = (fcupgated_branch->GetSize() > 0) ? (*fcupgated_branch)[0] : -1;
-            run_number = (int)(*run_number_branch)[0];
-            event_number = (int)(*event_number_branch)[0];
+            run_number = (run_number_branch->GetSize() > 0) ? (int)(*run_number_branch)[0] : -1;
+            event_number = (event_number_branch->GetSize() > 0) ? (int)(*event_number_branch)[0] : -1;
             outTree_meta->Fill();
         }
 
