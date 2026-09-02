@@ -432,6 +432,7 @@ def main():
         open_gen=False,
         nmax=flags.nmax,
         log_file=flags.log_file,
+        num_processes=flags.num_processes,
     )
     events_array, number_of_initial_electrons = run_cut_pipeline_respecting_trigger(
         events_array,
@@ -455,7 +456,9 @@ def main():
     if njobs == 1:
         for path in input_files:
             try:
-                output_file = apply_and_save_one_file(path, flags, parameters, plot_title)
+                output_file = apply_and_save_one_file(
+                    path, flags, parameters, plot_title
+                )
                 print(f"Saved {output_file}")
             except Exception as e:
                 print(f"FAILED: {path}: {e}")

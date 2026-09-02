@@ -5,6 +5,7 @@ import awkward as ak
 import time
 import numpy as np
 import pandas as pd
+import concurrent.futures as cf
 
 
 def CSV_to_df(file_path, separation=","):
@@ -15,6 +16,42 @@ def CSV_to_df(file_path, separation=","):
 def LoadYaml(file_name, base_path="../configs"):
     yaml_path = os.path.join(base_path, file_name)
     return yaml.safe_load(open(yaml_path))
+
+
+def _open_one_file(
+    data_path,
+    branches_to_open,
+    data_tree_name,
+    open_gen,
+    gen_branches_to_open,
+    gen_tree_name,
+    get_meta_info,
+    entry_stop=None,
+):
+    # Opens one file's reconstructed/gen/meta_info trees.
+    result = {}
+    if branches_to_open is not None:
+        with uproot.open(data_path + f":{data_tree_name}") as file:
+            result["reconstructed"] = file.arrays(
+                filter_name=branches_to_open, entry_stop=entry_stop, library="ak"
+            )
+    if open_gen:
+        with uproot.open(data_path + f":{gen_tree_name}") as file:
+            result["gen"] = file.arrays(
+                filter_name=gen_branches_to_open, entry_stop=entry_stop, library="ak"
+            )
+    if get_meta_info:
+        with uproot.open(data_path + f":meta_info") as file:
+            result["meta_info"] = file.arrays(
+                filter_name=[
+                    "total_luminosity",
+                    "total_num_events",
+                    "luminosity_after_cuts",
+                ],
+                entry_stop=entry_stop,
+                library="ak",
+            )
+    return result
 
 
 def open_data(
@@ -28,12 +65,15 @@ def open_data(
     output_format="awkward",  # Either dictionary or awkward
     log_file=None,
     get_meta_info=False,
+    num_processes=1,
 ):
-    event_dictionary = {"reconstructed": ak.Array([])}
-    if open_gen:
-        event_dictionary["gen"] = ak.Array([])
-    if get_meta_info:
-        event_dictionary["meta_info"] = ak.Array([])
+    # Appending the data for each file in lists and then converting to an Awkward array at the end
+    # This is more efficienct than repeatedly using ak.concatenate since that copies the whole array every time
+    # e.g. have file 1 in an awkward array, and every time we run ak.concatenate we copy file 1
+    # this concatenate approach doesn't just append
+    reconstructed_parts = []
+    gen_parts = []
+    meta_parts = []
     if log_file is not None:
         with open(log_file, "a") as f:
             f.write(f"Using file(s) {data_paths}\n")
@@ -43,109 +83,101 @@ def open_data(
         data_paths = [data_paths]
 
     start_time = time.time()
-    if nmax is not None:
+
+    if num_processes > 1 and len(data_paths) > 1:
+        # Parallel path: no per-file nmax truncation possible (workers are
+        # dispatched up front, before knowing how many events prior files
+        # yielded), so each worker reads its whole file and nmax is enforced
+        # by slicing the combined result afterward instead.
+        print(f"Opening {len(data_paths)} files using {num_processes} processes...")
+        if log_file is not None:
+            with open(log_file, "a") as f:
+                f.write(
+                    f"Opening {len(data_paths)} files using {num_processes} processes\n"
+                )
+        with cf.ProcessPoolExecutor(max_workers=num_processes) as executor:
+            futures = {
+                executor.submit(
+                    _open_one_file,
+                    data_path,
+                    branches_to_open,
+                    data_tree_name,
+                    open_gen,
+                    gen_branches_to_open,
+                    gen_tree_name,
+                    get_meta_info,
+                ): data_path
+                for data_path in data_paths
+            }
+            for future in cf.as_completed(futures):
+                data_path = futures[future]
+                result = future.result()
+                if "reconstructed" in result:
+                    reconstructed_parts.append(result["reconstructed"])
+                if "gen" in result:
+                    gen_parts.append(result["gen"])
+                if "meta_info" in result:
+                    meta_parts.append(result["meta_info"])
+                print(f"Opened {data_path}")
+                if log_file is not None:
+                    with open(log_file, "a") as f:
+                        f.write(f"Opened {data_path}\n")
+    else:
         remaining_events = nmax
-    for data_path in data_paths:
-        if nmax is not None:
-            if remaining_events <= 0:
+        for data_path in data_paths:
+            if nmax is not None and remaining_events <= 0:
                 break
-        num_events_in_file = 0
-        if branches_to_open is not None:
-            with uproot.open(data_path + f":{data_tree_name}") as file:
-                print(f"Opening reconstructed data from {data_path}")
-                if log_file is not None:
-                    with open(log_file, "a") as f:
-                        f.write(f"Opening reconstructed data from {data_path}\n")
-                if nmax is not None:
-                    arrays = file.arrays(
-                        filter_name=branches_to_open,
-                        entry_start=0,
-                        entry_stop=remaining_events,
-                        library="ak",
-                    )
-                    event_dictionary["reconstructed"] = ak.concatenate(
-                        (event_dictionary["reconstructed"], arrays)
-                    )
-                    num_events_in_file = len(arrays)
-                    print(
-                        f"{nmax-(remaining_events - num_events_in_file)}/{nmax} reco events loaded"
-                    )
-                else:
-                    event_dictionary["reconstructed"] = ak.concatenate(
-                        (
-                            event_dictionary["reconstructed"],
-                            file.arrays(filter_name=branches_to_open, library="ak"),
-                        )
-                    )
+            print(f"Opening data from {data_path}")
+            if log_file is not None:
+                with open(log_file, "a") as f:
+                    f.write(f"Opening data from {data_path}\n")
+
+            result = _open_one_file(
+                data_path,
+                branches_to_open,
+                data_tree_name,
+                open_gen,
+                gen_branches_to_open,
+                gen_tree_name,
+                get_meta_info,
+                entry_stop=remaining_events,
+            )
+
+            num_events_in_file = 0
+            if "reconstructed" in result:
+                reconstructed_parts.append(result["reconstructed"])
+                num_events_in_file = len(result["reconstructed"])
+            if "gen" in result:
+                gen_parts.append(result["gen"])
+            if "meta_info" in result:
+                meta_parts.append(result["meta_info"])
+
+            if nmax is not None:
+                remaining_events -= num_events_in_file
+                print(f"{nmax - remaining_events}/{nmax} events loaded")
+
+    event_dictionary = {
+        "reconstructed": (
+            ak.concatenate(reconstructed_parts) if reconstructed_parts else ak.Array([])
+        )
+    }
+    if open_gen:
+        event_dictionary["gen"] = (
+            ak.concatenate(gen_parts) if gen_parts else ak.Array([])
+        )
+    if get_meta_info:
+        event_dictionary["meta_info"] = (
+            ak.concatenate(meta_parts) if meta_parts else ak.Array([])
+        )
+
+    # Safety net for the parallel path (a no-op in the serial path, which
+    # already truncates per-file via entry_stop above).
+    if nmax is not None:
+        event_dictionary["reconstructed"] = event_dictionary["reconstructed"][:nmax]
         if open_gen:
-            with uproot.open(data_path + f":{gen_tree_name}") as file:
-                print("Opening gen data")
-                if log_file is not None:
-                    with open(log_file, "a") as f:
-                        f.write(f"Opening gen data from {data_path}\n")
-                if nmax is not None:
-                    event_dictionary["gen"] = ak.concatenate(
-                        (
-                            event_dictionary["gen"],
-                            file.arrays(
-                                filter_name=gen_branches_to_open,
-                                entry_start=0,
-                                entry_stop=remaining_events,
-                                library="ak",
-                            ),
-                        )
-                    )
-                    print(
-                        f"{nmax-(remaining_events - num_events_in_file)}/{nmax} gen events loaded"
-                    )
-                else:
-                    event_dictionary["gen"] = ak.concatenate(
-                        (
-                            event_dictionary["gen"],
-                            file.arrays(filter_name=gen_branches_to_open, library="ak"),
-                        )
-                    )
+            event_dictionary["gen"] = event_dictionary["gen"][:nmax]
         if get_meta_info:
-            with uproot.open(data_path + f":meta_info") as file:
-                print("Opening meta info")
-                if log_file is not None:
-                    with open(log_file, "a") as f:
-                        f.write(f"Opening meta data from {data_path}\n")
-                if nmax is not None:
-                    event_dictionary["meta_info"] = ak.concatenate(
-                        (
-                            event_dictionary["meta_info"],
-                            file.arrays(
-                                filter_name=[
-                                    "total_luminosity",
-                                    "total_num_events",
-                                    "luminosity_after_cuts",
-                                ],
-                                entry_start=0,
-                                entry_stop=remaining_events,
-                                library="ak",
-                            ),
-                        )
-                    )
-                    print(
-                        f"{nmax-(remaining_events - num_events_in_file)}/{nmax} meta events loaded"
-                    )
-                else:
-                    event_dictionary["meta_info"] = ak.concatenate(
-                        (
-                            event_dictionary["meta_info"],
-                            file.arrays(
-                                filter_name=[
-                                    "total_luminosity",
-                                    "total_num_events",
-                                    "luminosity_after_cuts",
-                                ],
-                                library="ak",
-                            ),
-                        )
-                    )
-        if nmax is not None:
-            remaining_events -= num_events_in_file
+            event_dictionary["meta_info"] = event_dictionary["meta_info"][:nmax]
 
     print(f"Took {time.time()-start_time} s to open file!")
     if log_file is not None:
