@@ -156,6 +156,7 @@ def open_data(
                 remaining_events -= num_events_in_file
                 print(f"{nmax - remaining_events}/{nmax} events loaded")
 
+    print("Concatenating into Awkward array")
     event_dictionary = {
         "reconstructed": (
             ak.concatenate(reconstructed_parts) if reconstructed_parts else ak.Array([])
@@ -231,6 +232,8 @@ def save_output(
         meta["total_num_events"] = events["total_num_events"]
     if "luminosity_after_cuts" in events.fields:
         meta["luminosity_after_cuts"] = events["luminosity_after_cuts"]
+    if "run_number" in events.fields:
+        meta["run_number"] = events["run_number"]
     if save_gen:
         print("Saving gen electrons")
         if log_file is not None:
