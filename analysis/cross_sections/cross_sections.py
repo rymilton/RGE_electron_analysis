@@ -6,6 +6,7 @@
 import numpy as np
 import awkward as ak
 import argparse
+import glob
 import os
 import sys
 import pandas as pd
@@ -146,23 +147,29 @@ def parse_arguments():
     return flags
 
 
+def get_input_files(flags):
+    """Resolves the candidate-electron input files, in precedence order:
+    --input_directories (globbed) > --input_file_array > --input_file."""
+    if flags.input_directories is not None:
+        input_files = []
+        for directory in flags.input_directories:
+            input_files.extend(glob.glob(f"{directory}/candidate_electrons/*.root"))
+        return sorted(input_files)
+    if flags.input_file_array is not None:
+        return flags.input_file_array
+    return [flags.input_file]
+
+
 def main():
     flags = parse_arguments()
     # Reading config file
     parameters = LoadYaml(flags.config, flags.config_directory)
-    import glob
 
-    input_data = []
-
-    for directory in flags.input_directories:
-        input_data.extend(glob.glob(f"{directory}/candidate_electrons/*.root"))
-
-    parameters = LoadYaml(os.path.join(flags.config_directory, flags.config))
-
-    njobs = max(1, min(flags.num_processes, len(input_data)))
+    input_files = get_input_files(flags)
+    njobs = max(1, min(flags.num_processes, len(input_files)))
 
     data_array = open_data(
-        data_paths=input_data,
+        data_paths=input_files,
         branches_to_open=parameters["BRANCHES_TO_LOAD"],
         data_tree_name="reconstructed_electrons",
         nmax=flags.nmax,
