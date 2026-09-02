@@ -6,7 +6,9 @@ import os
 import concurrent.futures as cf
 from utils import LoadYaml, open_data, save_output, CSV_to_df
 from selection_functions import *
+import ctypes
 
+ctypes.CDLL("libc.so.6").prctl(41, 1, 0, 0, 0)  # PR_SET_THP_DISABLE
 # Everything selection_functions.py's cut functions and diagnostic plots
 # actually read from events["reconstructed"] (verified by grepping the file
 # directly), plus has_trigger_electron/pass_status which electron_selection.py
@@ -311,14 +313,12 @@ def run_cut_pipeline_respecting_trigger(
     number_of_initial_electrons = len(events_array)
     events_array["pass_trigger"] = events_array["reconstructed"]["has_trigger_electron"]
 
-    # Tag original row order so it can be restored after the split/merge
-    events_array = ak.with_field(
-        events_array, np.arange(len(events_array)), "_original_index"
-    )
-
     trigger_mask = ak.values_astype(events_array["pass_trigger"], np.bool_)
     passed = events_array[trigger_mask]
     failed = events_array[~trigger_mask]
+    num_trigger_electrons = len(passed)
+
+    print(f"Have {num_trigger_electrons} events with trigger electrons!")
 
     passed, _ = run_cut_pipeline(
         passed,
@@ -327,14 +327,12 @@ def run_cut_pipeline_respecting_trigger(
         plot_title,
         develop_cuts,
         save_plots,
-        number_of_initial_electrons=number_of_initial_electrons,
+        number_of_initial_electrons=num_trigger_electrons,
     )
 
     failed = _pad_failed_trigger_events(failed, len(failed), flags.target_selection)
 
     combined = ak.concatenate([passed, failed])
-    combined = combined[ak.argsort(combined["_original_index"])]
-    combined = combined[[f for f in combined.fields if f != "_original_index"]]
 
     return combined, number_of_initial_electrons
 
