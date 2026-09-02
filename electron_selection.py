@@ -229,6 +229,11 @@ def run_cut_pipeline(
         log_file=flags.log_file,
         number_of_initial_electrons=number_of_initial_electrons,
     )
+    events_array = apply_status_cut(
+        events_array,
+        log_file=flags.log_file,
+        number_of_initial_electrons=number_of_initial_electrons,
+    )
     events_array = apply_partial_sampling_fraction_cut(
         events=events_array,
         develop_cuts=develop_cuts,
@@ -247,11 +252,6 @@ def run_cut_pipeline(
         save_plots=save_plots,
         plots_directory=flags.plots_directory,
         plot_title=plot_title,
-        log_file=flags.log_file,
-        number_of_initial_electrons=number_of_initial_electrons,
-    )
-    events_array = apply_status_cut(
-        events_array,
         log_file=flags.log_file,
         number_of_initial_electrons=number_of_initial_electrons,
     )
