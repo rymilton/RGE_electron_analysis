@@ -47,6 +47,7 @@ def _open_one_file(
                     "total_luminosity",
                     "total_num_events",
                     "luminosity_after_cuts",
+                    "run_number",
                 ],
                 entry_stop=entry_stop,
                 library="ak",
