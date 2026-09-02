@@ -1,0 +1,13 @@
+MC_BRANCHES_TO_LOAD:
+  - MC_px
+  - MC_py
+  - MC_pz
+  - MC_W
+  - MC_y
+  - MC_theta_degrees
+
+BRANCHES_TO_LOAD:
+  - x
+  - Q2
+  - pass_reco
+  - target
