@@ -110,7 +110,7 @@ def parse_arguments():
     parser.add_argument(
         "--MC_nmax",
         default=None,
-        type=None,
+        type=int,
         help="Max number of simulation events to load",
     )
     parser.add_argument(
@@ -214,7 +214,7 @@ def main():
             flags.solid_radiative_corrections_path
         )
         radiative_corrections_df_deuterium = OpenCorrections(
-            flags.solid_radiative_corrections_path
+            flags.deuterium_radiative_corrections_path
         )
         radiative_corrections_dictionary = {
             flags.solid_target: radiative_corrections_df_solid,
