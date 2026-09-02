@@ -4,13 +4,11 @@
 # The unfolding model needs to be trained already. See unfolding/RGE_unfolding.py to train an unfolding model.
 
 import numpy as np
-import awkward as ak
 import argparse
 import glob
 import os
 import sys
 import pandas as pd
-from concurrent.futures import ProcessPoolExecutor, as_completed
 
 REPO_TOP_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 sys.path.insert(0, REPO_TOP_DIR)
@@ -55,13 +53,13 @@ def parse_arguments():
     parser.add_argument(
         "--solid_output_path",
         default="/home/rmilton/work_dir/rge_datasets/phys_val/020150/carbon_cross_sections.csv",
-        help="Directory to candidate electrons",
+        help="Path of the .csv file to write the solid-target cross sections to",
         type=str,
     )
     parser.add_argument(
         "--deuterium_output_path",
         default="/home/rmilton/work_dir/rge_datasets/phys_val/020150/LD2_cross_sections.csv",
-        help="Directory to candidate electrons",
+        help="Path of the .csv file to write the LD2 cross sections to",
         type=str,
     )
     parser.add_argument(
@@ -175,6 +173,7 @@ def main():
         nmax=flags.nmax,
         get_meta_info=True,
         num_processes=njobs,
+        log_file=flags.log_file,
     )
 
     # No train/test split here and histogramming is order-independent, so
@@ -186,6 +185,13 @@ def main():
     )
 
     if flags.use_unfolding:
+        raise NotImplementedError(
+            "--use_unfolding does not work. This branch never calls "
+            "unfolding_procedure() (analysis/unfolding/RGE_unfolding.py shows how "
+            "it should be called), and it still passes the old open_MC=/"
+            "MC_branches_to_open=/MC_tree_name= arguments, which utils.open_data "
+            "no longer accepts."
+        )
         if flags.input_file_array is not None:
             input_simulation = flags.simulation_input_file_array
         else:
