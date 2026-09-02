@@ -289,6 +289,7 @@ def main():
         simulation_dataloader,
         pseudodata_dataloader,
         variables_to_unfold,
+        new_model_name=flags.model_path
     )
 
     plt.figure()
@@ -316,15 +317,15 @@ def main():
         "Q2":    {"bins": 50, "range": (0, 10), "xlabel": "$Q^2~(GeV^2)$"},
         "vz":   {"bins": 50, "range": (-12, 5), "xlabel": "$v_z ~(cm)$"},
     }
-
+    # Use the test data for plotting. If no train_test_split was done, this is the full dataset.
+    # get_testing_data() returns (reco, MC, pass_reco, pass_truth)
+    # If there's no MC, MC and pass_truth are None
+    simulation_testing_data = simulation_dataloader.get_testing_data()
+    pseudodata_testing_data = pseudodata_dataloader.get_testing_data()
     for var in variables_to_unfold:
         cfg = variable_settings[var]
 
-        # Use the test data for plotting. If no train_test_split was done, this is the full dataset.
-        # get_testing_data() returns (reco, MC, pass_reco, pass_truth)
-        # If there's no MC, MC and pass_truth are None
-        simulation_testing_data = simulation_dataloader.get_testing_data()
-        pseudodata_testing_data = pseudodata_dataloader.get_testing_data()
+        
         plot_unfolded(
             simulation_testing_data[0][var][simulation_testing_data[2]],
             pseudodata_testing_data[0][var][pseudodata_testing_data[2]],
@@ -348,6 +349,79 @@ def main():
             cfg["xlabel"], plot_title,
             f"{flags.plot_directory}/{flags.MC_name}_{flags.pseudodata_name}_closure_iteration{flags.num_iterations}_step2_{var}.png"
         )
+
+    
+    # Plotting the 2D cross sections now
+    x_bins = variable_settings["x"]["bins"]
+    x_range = variable_settings["x"]["range"]
+    Q2_bin_edges = np.linspace(variable_settings["Q2"]["range"][0], variable_settings["Q2"]["range"][1], 11)
+
+    for i, low_Q2 in enumerate(Q2_bin_edges):
+        fig, axs = plt.subplots(2, 1, figsize=(10, 10), sharex=True, gridspec_kw={
+            'height_ratios': [2, 1],   # top panel bigger
+            'hspace': 0.05             # reduce space between panels
+        })
+        axs = axs.flatten()
+
+        if i == len(Q2_bin_edges) - 1:
+            break
+        high_Q2 = Q2_bin_edges[i+1]
+        simulation_Q2_mask = (simulation_testing_data[1]["MC_Q2"] > low_Q2) & (simulation_testing_data[1]["MC_Q2"] < high_Q2)
+        sim_bin_pass_truth_mask = (simulation_Q2_mask) & (simulation_testing_data[3])
+
+        pseudodata_Q2_mask = (pseudodata_testing_data[1]["MC_Q2"] > low_Q2) & (pseudodata_testing_data[1]["MC_Q2"] < high_Q2)
+        pseudodata_bin_pass_truth_mask = (pseudodata_Q2_mask) & (pseudodata_testing_data[3])
+        plot_unfolded(
+            sim_vals = simulation_testing_data[1]["MC_x"][sim_bin_pass_truth_mask],
+            data_vals = pseudodata_testing_data[1]["MC_x"][pseudodata_bin_pass_truth_mask],
+            unfolding_weights = step2_weights[sim_bin_pass_truth_mask],
+            sim_label = f"{simulation_dataloader.data_name} Truth",
+            data_label = f"{pseudodata_dataloader.data_name} Truth",
+            unfolded_label = f"Unfolded {pseudodata_dataloader.data_name}",
+            bins = x_bins, 
+            binning_range = x_range,
+            xlabel = "x",
+            ylabel = "$\\frac{1}{\sigma}~\\frac{d^2 \sigma}{dx dQ^2}~(1/GeV^2)$",
+            title = f"{plot_title}\n${low_Q2} ~GeV^2<Q^2<{high_Q2} ~GeV^2$",
+            title_position = .98,
+            outfile = f"{flags.plot_directory}/{flags.MC_name}_{flags.pseudodata_name}_closure_iteration{flags.num_iterations}_step2_crosssection_Q2_{low_Q2}_{high_Q2}_coarsebinning.png"
+        )
+        plt.close()
+
+    num_Q2_bins = 9*5
+    Q2_bin_edges = np.logspace(np.log10(1), np.log10(11), num=num_Q2_bins+1, base=10.)
+
+    for i, low_Q2 in enumerate(Q2_bin_edges):
+        fig, axs = plt.subplots(2, 1, figsize=(10, 10), sharex=True, gridspec_kw={
+            'height_ratios': [2, 1],   # top panel bigger
+            'hspace': 0.05             # reduce space between panels
+        })
+        axs = axs.flatten()
+
+        if i == len(Q2_bin_edges) - 1:
+            break
+        high_Q2 = Q2_bin_edges[i+1]
+        simulation_Q2_mask = (simulation_testing_data[1]["MC_Q2"] > low_Q2) & (simulation_testing_data[1]["MC_Q2"] < high_Q2)
+        sim_bin_pass_truth_mask = (simulation_Q2_mask) & (simulation_testing_data[3])
+
+        pseudodata_Q2_mask = (pseudodata_testing_data[1]["MC_Q2"] > low_Q2) & (pseudodata_testing_data[1]["MC_Q2"] < high_Q2)
+        pseudodata_bin_pass_truth_mask = (pseudodata_Q2_mask) & (pseudodata_testing_data[3])
+        plot_unfolded(
+            sim_vals = simulation_testing_data[1]["MC_x"][sim_bin_pass_truth_mask],
+            data_vals = pseudodata_testing_data[1]["MC_x"][pseudodata_bin_pass_truth_mask],
+            unfolding_weights = step2_weights[sim_bin_pass_truth_mask],
+            sim_label = f"{simulation_dataloader.data_name} Truth",
+            data_label = f"{pseudodata_dataloader.data_name} Truth",
+            unfolded_label = f"Unfolded {pseudodata_dataloader.data_name}",
+            bins = x_bins, 
+            binning_range = x_range,
+            xlabel = "x",
+            ylabel = "$\\frac{1}{\sigma}~\\frac{d^2 \sigma}{dx dQ^2}~(1/GeV^2)$",
+            title = f"{plot_title}\n${low_Q2} ~GeV^2<Q^2<{high_Q2} ~GeV^2$",
+            title_position = .98,
+            outfile = f"{flags.plot_directory}/{flags.MC_name}_{flags.pseudodata_name}_closure_iteration{flags.num_iterations}_step2_crosssection_Q2_{low_Q2}_{high_Q2}_finebinning.png"
+        )
+        plt.close()
 
 if __name__ == "__main__":
     main()
