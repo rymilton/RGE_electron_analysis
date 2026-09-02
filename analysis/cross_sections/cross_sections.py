@@ -177,10 +177,12 @@ def main():
         num_processes=njobs,
     )
 
+    # No train/test split here and histogramming is order-independent, so
+    # shuffling would only cost a full permutation copy of the combined array.
     data_dataloader = AnalysisDataloader(
         reconstructed=data_array["reconstructed"],
         MC=None,
-        shuffle=True,
+        shuffle=False,
     )
 
     if flags.use_unfolding:
@@ -226,6 +228,29 @@ def main():
     # In the output file, have unfolded and non-unfolded cross sections
     output_dataframes = {flags.solid_target: pd.DataFrame({}), "LD2": pd.DataFrame({})}
 
+    # The luminosity is per-run, not per-target, so this is computed once for
+    # both targets. total_luminosity is a per-run constant broadcast to every
+    # event, hence the [0] on each run's slice.
+    run_numbers = np.asarray(data_array["meta_info"]["run_number"])
+    luminosities = np.asarray(data_array["meta_info"]["total_luminosity"])
+
+    unique_runs = np.unique(run_numbers)
+    print("Unique run numbers: ", unique_runs)
+
+    total_integrated_luminosity = 0
+    for run in unique_runs:
+        run_mask = run_numbers == run
+        total_integrated_luminosity += luminosities[run_mask][0]
+
+    print(f"Total integrated luminosity: {total_integrated_luminosity}")
+
+    fraction_pass_reco = np.sum(data_dataloader.pass_reco) / len(
+        data_dataloader.pass_reco
+    )
+    print("Fraction pass reco: ", fraction_pass_reco)
+
+    os.makedirs(flags.plots_directory, exist_ok=True)
+
     for target_name in [flags.solid_target, "LD2"]:
         x_bin_edges = analysis_options.x_bins_by_target[target_name]
         Q2_bin_edges = analysis_options.Q2_bins_by_target[target_name]
@@ -237,27 +262,6 @@ def main():
         output_dataframes[target_name]["x_bin_center"] = repeated_x_bin_centers
         output_dataframes[target_name]["Q2_bin_center"] = repeated_Q2_bin_centers
 
-        run_numbers = np.asarray(data_array["meta_info"]["run_number"])
-        luminosities = np.asarray(data_array["meta_info"]["total_luminosity"])
-
-        unique_runs = np.unique(run_numbers)
-        print("Unique run numbers: ", unique_runs)
-
-        total_integrated_luminosity = 0
-
-        for run in unique_runs:
-            run_mask = run_numbers == run
-            total_integrated_luminosity += luminosities[run_mask][0]
-
-        print(f"Total integrated luminosity: {total_integrated_luminosity}")
-
-        import time
-
-        os.makedirs(flags.plots_directory, exist_ok=True)
-        fraction_pass_reco = np.sum(data_dataloader.pass_reco) / len(
-            data_dataloader.pass_reco
-        )
-        print("Fraction pass reco: ", fraction_pass_reco)
         # No unfolding, no radiative corrections
         (
             absolute_cross_section_norad_nounfolding,
