@@ -785,23 +785,25 @@ def _fit_sector_momentum_bins(
                 )
                 continue
 
-            if high_ECIN_edge < 0.1:
-                fit_mask = PCAL_bin_centers > 0.11
-                p0 = (
-                    len(PCAL_SF_in_ECIN_slice),
-                    np.mean(PCAL_SF_in_ECIN_slice[PCAL_SF_in_ECIN_slice > 0.11]),
-                    np.std(PCAL_SF_in_ECIN_slice[PCAL_SF_in_ECIN_slice > 0.11]) ** 2,
-                )
+            # Fit the Gaussian core in a window scaled by its own width, so the
+            # window follows the peak as it moves with momentum and SF(ECIN).
+            # Seed sigma from the upper half, which is free of the low-side tail.
+            peak_index = np.argmax(counts)
+            mu = PCAL_bin_centers[peak_index]
+            above_peak = PCAL_SF_in_ECIN_slice[PCAL_SF_in_ECIN_slice > mu]
+            sigma = np.std(above_peak)
+            # Refit to recenter the window on the fitted core rather than the seed.
+            for _ in range(2):
+                fit_low = mu - 1.5 * sigma
+                fit_high = mu + 3 * sigma
+                fit_mask = (PCAL_bin_centers > fit_low) & (PCAL_bin_centers < fit_high)
                 popt, _ = curve_fit(
-                    gaus, PCAL_bin_centers[fit_mask], counts[fit_mask], p0=p0
+                    gaus,
+                    PCAL_bin_centers[fit_mask],
+                    counts[fit_mask],
+                    p0=(counts[peak_index], mu, sigma**2),
                 )
-            else:
-                p0 = (
-                    len(PCAL_SF_in_ECIN_slice),
-                    np.mean(PCAL_SF_in_ECIN_slice),
-                    np.std(PCAL_SF_in_ECIN_slice) ** 2,
-                )
-                popt, _ = curve_fit(gaus, PCAL_bin_centers, counts, p0=p0)
+                mu, sigma = popt[1], np.sqrt(popt[2])
 
             if save_plots:
                 axs_gaussians[j].plot(PCAL_bin_centers, gaus(PCAL_bin_centers, *popt))
