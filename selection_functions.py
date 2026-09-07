@@ -216,7 +216,7 @@ def apply_fiducial_cuts(
         axs[0].set_ylabel("SF")
         axs[0].set_xlabel("PCAL V (cm)")
         if PCAL_V_cut is not None:
-            axs[0].vlines(PCAL_V_cut, low_bin[0], low_bin[1], color="red")
+            axs[0].vlines(PCAL_V_cut, high_bin[0], high_bin[1], color="red")
 
         divider = make_axes_locatable(axs[0])
         cax = divider.append_axes("right", size="5%", pad=0.05)
@@ -232,7 +232,7 @@ def apply_fiducial_cuts(
         axs[1].set_ylabel("SF")
         axs[1].set_xlabel("PCAL W (cm)")
         if PCAL_W_cut is not None:
-            axs[1].vlines(PCAL_W_cut, low_bin[0], low_bin[1], color="red")
+            axs[1].vlines(PCAL_W_cut, high_bin[0], high_bin[1], color="red")
         divider = make_axes_locatable(axs[1])
         cax = divider.append_axes("right", size="5%", pad=0.05)
         cbar = fig.colorbar(mesh, cax=cax)
@@ -1622,27 +1622,8 @@ def _plot_target_selections(
         axs[sector].hist(
             vertex_z, bins=100, range=(-12, 5), histtype="step", density=True
         )
-        axs[sector].hist(
-            vertex_z[deuterium_cut],
-            bins=100,
-            range=(-12, 5),
-            color="b",
-            label="LD2",
-            alpha=0.8,
-            density=True,
-        )
-        axs[sector].hist(
-            vertex_z[solid_cut],
-            bins=100,
-            range=(-12, 5),
-            color="r",
-            label=solid_target_name,
-            alpha=0.8,
-            density=True,
-        )
         axs[sector].set_xlabel("$v_{z}$ (cm)")
         axs[sector].set_title(f"Sector {sector+1}")
-        axs[sector].legend(loc="upper left")
 
     fig.tight_layout()
     if plot_title is not None:
