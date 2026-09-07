@@ -4,3 +4,8 @@ __pycache__
 *.so
 *.pcm
 *.pkl
+analysis/crosscheck.py
+analysis/crosscheck.txt
+*.png
+*.pdf
+*.ipynb_checkpoints
