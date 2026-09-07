@@ -1,18 +1,18 @@
+import json
+import os
+
 import numpy as np
 
+# Bin edges derived from the data by analysis/derive_xQ2_binning.py. Every target
+# shares the same edges so that target-to-target ratios stay comparable bin by bin.
+BINNING_FILE = os.path.join(os.path.dirname(__file__), "xQ2_binning.json")
+
+with open(BINNING_FILE) as binning_file:
+    binning = json.load(binning_file)
+
 x_bins_by_target = {
-    "C": np.linspace(0, 1, num=50 + 1),
-    "Cu": np.linspace(0, 1, num=50 + 1),
-    "Pb": np.linspace(0, 1, num=50 + 1),
-    "Al": np.linspace(0, 1, num=50 + 1),
-    "Sn": np.linspace(0, 1, num=50 + 1),
-    "LD2": np.linspace(0, 1, num=50 + 1),
+    target: np.asarray(binning["x_edges"]) for target in binning["targets"]
 }
 Q2_bins_by_target = {
-    "C": np.logspace(np.log10(1), np.log10(11), num=45 + 1, base=10.0),
-    "Cu": np.logspace(np.log10(1), np.log10(11), num=45 + 1, base=10.0),
-    "Pb": np.logspace(np.log10(1), np.log10(11), num=45 + 1, base=10.0),
-    "Al": np.logspace(np.log10(1), np.log10(11), num=45 + 1, base=10.0),
-    "Sn": np.logspace(np.log10(1), np.log10(11), num=45 + 1, base=10.0),
-    "LD2": np.logspace(np.log10(1), np.log10(11), num=45 + 1, base=10.0),
+    target: np.asarray(binning["Q2_edges"]) for target in binning["targets"]
 }

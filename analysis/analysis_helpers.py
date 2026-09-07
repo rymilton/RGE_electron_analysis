@@ -6,6 +6,7 @@ from analysis_dataloader import AnalysisDataloader
 import awkward as ak
 import mplhep as hep
 import pandas as pd
+
 hep.style.use(hep.style.CMS)
 from cycler import cycler
 
@@ -356,6 +357,9 @@ def calculate_cross_sections(
     apply_radiative_corrections=False,
     radiative_corrections_df=None,
     efficiency_file=None,
+    min_bin_fill=0.95,
+    min_efficiency=0.01,
+    report_name=None,
 ):
     if use_truth:
         data_to_use = dataloader.MC[dataloader.pass_truth]
@@ -407,11 +411,12 @@ def calculate_cross_sections(
             efficiency_file, x_binning, Q2_binning
         )
 
-        # Fold exact-zero efficiency (and its error) into NaN -- same
-        # reasoning as before: epsilon=0 has no information to invert.
-        zero_mask = efficiency_map < .01
-        efficiency_map = np.where(zero_mask, np.nan, efficiency_map)
-        efficiency_error_map = np.where(zero_mask, np.nan, efficiency_error_map)
+        # Fold low efficiency (and its error) into NaN: epsilon at or near zero
+        # has no information to invert, and dividing by it turns a handful of
+        # counts into a huge, unstable correction.
+        low_efficiency = efficiency_map < min_efficiency
+        efficiency_map = np.where(low_efficiency, np.nan, efficiency_map)
+        efficiency_error_map = np.where(low_efficiency, np.nan, efficiency_error_map)
 
         with np.errstate(invalid="ignore", divide="ignore"):
             corrected_cross_sections = absolute_cross_sections / efficiency_map
@@ -420,13 +425,130 @@ def calculate_cross_sections(
             # independent samples, so their relative uncertainties add in
             # quadrature.
             stat_term = absolute_cross_sections_errors / efficiency_map
-            eff_term = corrected_cross_sections * (efficiency_error_map / efficiency_map)
+            eff_term = corrected_cross_sections * (
+                efficiency_error_map / efficiency_map
+            )
             corrected_cross_sections_errors = np.sqrt(stat_term**2 + eff_term**2)
 
         absolute_cross_sections = corrected_cross_sections
         absolute_cross_sections_errors = corrected_cross_sections_errors
+    # NEEDS TO BE REVIEWED!!
+    partial = np.zeros_like(absolute_cross_sections, dtype=bool)
+    if min_bin_fill is not None:
+        # Bins the kinematic boundary cuts through collect events in only part of
+        # their area but are normalized by the whole rectangle, so their cross
+        # section comes out suppressed by the fill fraction. Blank them rather
+        # than report a value that is wrong by a known, sometimes large, factor.
+        fill = kinematic_fill_fraction(x_binning, Q2_binning)
+        partial = fill < min_bin_fill
+        absolute_cross_sections = np.where(partial, np.nan, absolute_cross_sections)
+        absolute_cross_sections_errors = np.where(
+            partial, np.nan, absolute_cross_sections_errors
+        )
+
+    if report_name is not None:
+        report_bin_losses(
+            report_name,
+            nonnormalized_cross_sections,
+            partial,
+            low_efficiency if efficiency_file is not None else None,
+            min_bin_fill,
+            min_efficiency,
+        )
 
     return absolute_cross_sections.flatten(), absolute_cross_sections_errors.flatten()
+
+
+# NEEDS TO BE REVIEWED!!
+def report_bin_losses(
+    name, counts, partial, low_efficiency, min_bin_fill, min_efficiency
+):
+    """Says why bins dropped out. Both the fill mask and the efficiency cut blank
+    bins the same way, and the caller's `> 0` query then removes them together,
+    so without this the two are indistinguishable in the output."""
+    populated = counts > 0
+    empty = ~populated
+
+    print(f"\n{name}: bin accounting ({counts.size} total)")
+    print(f"  empty (no events)                      {int(empty.sum()):>6d}")
+    print(f"  populated                              {int(populated.sum()):>6d}")
+    if min_bin_fill is not None:
+        lost = populated & partial
+        print(f"  - cut by fill < {min_bin_fill:<22g} {int(lost.sum()):>6d}")
+    if low_efficiency is not None:
+        lost = populated & low_efficiency & ~partial
+        print(f"  - cut by efficiency < {min_efficiency:<16g} {int(lost.sum()):>6d}")
+    kept = populated & ~partial
+    if low_efficiency is not None:
+        kept &= ~low_efficiency
+    print(f"  = reported                             {int(kept.sum()):>6d}")
+
+
+# Beam/target constants and the kinematic cuts applied upstream by
+# selection_functions.apply_kinematic_cuts (configs/config.yaml
+# ELECTRON_KINEMATIC_CUTS). These mirror tuple_maker.cpp's
+# calculate_DIS_quantities -- see CLAUDE.md's note on these constants living in
+# more than one place.
+E_BEAM = 10.547
+PROTON_MASS = 0.938
+Y_MAX = 0.85
+W_MIN = 2.0
+Q2_MIN = 1.0
+
+# NEEDS TO BE REVIEWED!!
+
+
+def kinematic_fill_fraction(x_binning, Q2_binning, num_nodes=64):
+    """Fraction of each bin's area that the upstream kinematic cuts allow.
+
+    The cuts rearrange into two curves in the x-Q2 plane:
+        y < Y_MAX  ->  x > Q2 / (2 * M * E * Y_MAX)
+        W > W_MIN  ->  x < Q2 / (Q2 + W_MIN^2 - M^2)
+    so the allowed x width at a given Q2 is known in closed form and the bin's
+    allowed area is a 1D integral over Q2, done here by Gauss-Legendre.
+
+    A bin fully inside the band returns 1.0. A bin the boundary cuts through
+    returns the fraction of it that can hold events -- which is exactly the
+    factor by which normalize_to_absolute_cross_section under-reports it, since
+    that divides by the full rectangle regardless."""
+    x_binning = np.asarray(x_binning, dtype=float)
+    Q2_binning = np.asarray(Q2_binning, dtype=float)
+
+    x_low, x_high = x_binning[:-1], x_binning[1:]
+    Q2_low, Q2_high = Q2_binning[:-1], Q2_binning[1:]
+
+    nodes, weights = np.polynomial.legendre.leggauss(num_nodes)
+    # Gauss-Legendre nodes mapped from [-1, 1] onto each Q2 bin: (nodes, n_Q2)
+    Q2_nodes = (
+        0.5 * (Q2_high - Q2_low)[None, :] * nodes[:, None]
+        + 0.5 * (Q2_high + Q2_low)[None, :]
+    )
+
+    x_min_allowed = Q2_nodes / (2 * PROTON_MASS * E_BEAM * Y_MAX)
+    x_max_allowed = Q2_nodes / (Q2_nodes + W_MIN**2 - PROTON_MASS**2)
+
+    # (nodes, n_x, n_Q2) -> allowed x width at every node of every bin
+    lower = np.maximum(x_low[None, :, None], x_min_allowed[:, None, :])
+    upper = np.minimum(x_high[None, :, None], x_max_allowed[:, None, :])
+    widths = np.clip(upper - lower, 0, None)
+
+    allowed_area = (
+        0.5 * (Q2_high - Q2_low)[None, :] * np.einsum("n,nij->ij", weights, widths)
+    )
+    bin_areas = (x_high - x_low)[:, None] * (Q2_high - Q2_low)[None, :]
+
+    fill = allowed_area / bin_areas
+    # Q2 > Q2_MIN is a plain bound on the Q2 axis, so it just zeroes whole rows.
+    fill[:, Q2_high <= Q2_MIN] = 0.0
+    return fill
+
+
+def coarse_Q2_grouping(Q2_binning, num_groups=10):
+    """Coarser Q2 edges for plot_cross_sections' legend, derived from the actual
+    binning. Spanning the real edges (rather than a hardcoded range) is what keeps
+    the highest Q2 bins from being silently dropped by the query in the plot."""
+    indices = np.linspace(0, len(Q2_binning) - 1, num_groups + 1).astype(int)
+    return np.asarray(Q2_binning)[np.unique(indices)]
 
 
 def plot_cross_sections(
@@ -448,12 +570,19 @@ def plot_cross_sections(
             f"Q2_bin_center>{Q2_range[0]} & Q2_bin_center<{Q2_range[1]} and {cross_section_name}>0"
         )
 
-        bin_widths = x_binning[1] - x_binning[0]
+        # The x binning is not necessarily uniform, so each point gets the width of
+        # the bin it actually falls in rather than a single shared width.
+        x_widths = np.diff(x_binning)
+        bin_indices = np.clip(
+            np.searchsorted(x_binning, masked_dataframe["x_bin_center"]) - 1,
+            0,
+            len(x_widths) - 1,
+        )
 
         plot = plt.errorbar(
             masked_dataframe["x_bin_center"],
             masked_dataframe[cross_section_name],
-            xerr=bin_widths / 2,
+            xerr=x_widths[bin_indices] / 2,
             yerr=masked_dataframe[f"{cross_section_name}_errors"],
             label=f"{round(Q2_range[0],2)} < $Q^2$ <{round(Q2_range[1],2)}",
             fmt="o",
@@ -464,7 +593,7 @@ def plot_cross_sections(
     plt.legend(ncol=2, loc="upper right", fontsize=16)
     plt.tight_layout()
     plt.ylim(5 * 10**-3, 5 * 10**2)
-    plt.xlim(0, 0.8)
+    plt.xlim(x_binning[0], x_binning[-1])
     plt.yscale("log")
 
     if plot_title is not None:

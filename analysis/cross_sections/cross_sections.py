@@ -18,7 +18,12 @@ from utils import LoadYaml, open_data
 from analysis_dataloader import AnalysisDataloader
 import analysis_options
 from radiative_corrections import OpenCorrections
-from analysis_helpers import calculate_cross_sections, plot_cross_sections
+from analysis_helpers import (
+    calculate_cross_sections,
+    kinematic_fill_fraction,
+    coarse_Q2_grouping,
+    plot_cross_sections,
+)
 
 
 def parse_arguments():
@@ -139,6 +144,18 @@ def parse_arguments():
     parser.add_argument(
         "--efficiency_file", default=None, type=str, help=".csv file with efficiencies"
     )
+    parser.add_argument(
+        "--min_efficiency",
+        default=0.01,
+        type=float,
+        help="Blank bins whose efficiency is below this. Dividing by a near-zero efficiency turns a few counts into a huge, unstable correction. Use 0 to keep every nonzero-efficiency bin",
+    )
+    parser.add_argument(
+        "--min_bin_fill",
+        default=0.95,
+        type=float,
+        help="Blank bins whose kinematically-allowed area fraction is below this. Such bins are normalized by their full area but only partly fillable, so their cross section is suppressed. Use 0 to report them anyway",
+    )
 
     flags = parser.parse_args()
 
@@ -186,11 +203,12 @@ def main():
 
     if flags.use_unfolding:
         raise NotImplementedError(
-            "--use_unfolding does not work. This branch never calls "
-            "unfolding_procedure() (analysis/unfolding/RGE_unfolding.py shows how "
-            "it should be called), and it still passes the old open_MC=/"
-            "MC_branches_to_open=/MC_tree_name= arguments, which utils.open_data "
-            "no longer accepts."
+            "--use_unfolding is not supported: the unfolding model it relies on "
+            "gives incorrect results, so this path was abandoned rather than "
+            "finished. The code below is left for reference only and does not "
+            "run -- it never calls unfolding_procedure(), and it still passes "
+            "the old open_MC=/MC_branches_to_open=/MC_tree_name= arguments that "
+            "utils.open_data no longer accepts."
         )
         if flags.input_file_array is not None:
             input_simulation = flags.simulation_input_file_array
@@ -280,6 +298,9 @@ def main():
             apply_radiative_corrections=False,
             integrated_luminosity=total_integrated_luminosity,
             efficiency_file=flags.efficiency_file,
+            min_bin_fill=flags.min_bin_fill,
+            min_efficiency=flags.min_efficiency,
+            report_name=target_name,
         )
         output_dataframes[target_name][
             "cross_section_norad_nounfolding"
@@ -294,7 +315,7 @@ def main():
         plot_cross_sections(
             output_dataframes[target_name],
             x_binning=x_bin_edges,
-            Q2_binning=np.arange(1, 12, 1),
+            Q2_binning=coarse_Q2_grouping(Q2_bin_edges),
             cross_section_name="cross_section_norad_nounfolding",
             plot_title=f"{target_name}, No rad. corrections, no unfolding",
             save_path=save_path,
@@ -313,6 +334,8 @@ def main():
                 apply_radiative_corrections=True,
                 integrated_luminosity=total_integrated_luminosity,
                 efficiency_file=flags.efficiency_file,
+            min_bin_fill=flags.min_bin_fill,
+            min_efficiency=flags.min_efficiency,
                 radiative_corrections_df=radiative_corrections_dictionary[target_name],
             )
             output_dataframes[target_name][
@@ -327,7 +350,7 @@ def main():
             plot_cross_sections(
                 output_dataframes[target_name],
                 x_bin_edges,
-                Q2_binning=np.arange(1, 12, 1),
+                Q2_binning=coarse_Q2_grouping(Q2_bin_edges),
                 cross_section_name="cross_section_withrad_nounfolding",
                 plot_title=f"{target_name}, With rad. corrections, no unfolding",
                 save_path=save_path,
@@ -345,6 +368,8 @@ def main():
                 apply_radiative_corrections=True,
                 integrated_luminosity=total_integrated_luminosity,
                 efficiency_file=flags.efficiency_file,
+            min_bin_fill=flags.min_bin_fill,
+            min_efficiency=flags.min_efficiency,
                 radiative_corrections_df=radiative_corrections_dictionary[target_name],
                 use_truth=True,
                 weights=step2_weights,
@@ -361,7 +386,7 @@ def main():
             plot_cross_sections(
                 output_dataframes[target_name],
                 x_bin_edges,
-                Q2_binning=np.arange(1, 12, 1),
+                Q2_binning=coarse_Q2_grouping(Q2_bin_edges),
                 cross_section_name="cross_section_withrad_withunfolding",
                 plot_title=f"{target_name}, With rad. corrections, With unfolding",
                 save_path=save_path,
