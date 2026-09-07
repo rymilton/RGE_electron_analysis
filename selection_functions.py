@@ -49,7 +49,10 @@ def apply_kinematic_cuts(
             y_cut_value = float(cut_value)
         elif variable_name == "W":
             W_cut_value = float(cut_value)
-    events["pass_reco"] = mask
+    if "pass_reco" not in events.fields:
+        events["pass_reco"] = mask
+    else:
+        events["pass_reco"] = events["pass_reco"] & mask
     events["pass_kinematic"] = mask
     print(f"Have {ak.sum(events['pass_reco'])} events after kinematic cuts")
     if save_plots:
@@ -1415,7 +1418,12 @@ def apply_sampling_fraction_cut(
 
 
 def apply_status_cut(events, log_file=None, number_of_initial_electrons=None):
-    events["pass_reco"] = events["pass_reco"] & events["reconstructed"]["pass_status"]
+    if "pass_reco" not in events.fields:
+        events["pass_reco"] = events["reconstructed"]["pass_status"]
+    else:
+        events["pass_reco"] = (
+            events["pass_reco"] & events["reconstructed"]["pass_status"]
+        )
 
     print(f"Have {ak.sum(events['pass_reco'])} events after status cut")
     if log_file is not None:
@@ -1428,8 +1436,8 @@ def apply_status_cut(events, log_file=None, number_of_initial_electrons=None):
 
 
 def double_gaussian(x, amp1, mean1, sigma1, amp2, mean2, sigma2):
-    return amp1 * np.exp(-((x - mean1) ** 2) / (2 * sigma1)) + amp2 * np.exp(
-        -((x - mean2) ** 2) / (2 * sigma2)
+    return amp1 * np.exp(-((x - mean1) ** 2) / (2 * sigma1 * sigma1)) + amp2 * np.exp(
+        -((x - mean2) ** 2) / (2 * sigma2 * sigma2)
     )
 
 
@@ -1583,6 +1591,63 @@ def _plot_target_selections(
         plt.suptitle(plot_title, y=1.0)
     if plots_directory is not None:
         plt.savefig(plots_directory + "target_selections.png")
+
+    plt.close()
+
+    fig, axs = plt.subplots(3, 2, figsize=(18, 18))
+    axs = axs.flatten()
+
+    for sector in range(num_sectors):
+        sector_cut = (electrons["sector"] == (sector + 1)) & (pass_reco)
+        vertex_z = np.array(electrons["v_z"][sector_cut])
+
+        deuterium_z_mean, deuterium_z_sigma = (
+            deuterium_mean_by_sector[sector],
+            deuterium_sigma_by_sector[sector],
+        )
+        solid_z_mean, solid_z_sigma = (
+            solid_mean_by_sector[sector],
+            solid_sigma_by_sector[sector],
+        )
+
+        deuterium_cut = (vertex_z > (deuterium_z_mean - 3 * deuterium_z_sigma)) & (
+            vertex_z < (deuterium_z_mean + 3 * deuterium_z_sigma)
+        )
+        solid_cut = (vertex_z > (solid_z_mean - 5 * solid_z_sigma)) & (
+            vertex_z < (solid_z_mean + 5 * solid_z_sigma)
+        )
+
+        axs[sector].hist(
+            vertex_z, bins=100, range=(-12, 5), histtype="step", density=True
+        )
+        axs[sector].hist(
+            vertex_z[deuterium_cut],
+            bins=100,
+            range=(-12, 5),
+            color="b",
+            label="LD2",
+            alpha=0.8,
+            density=True,
+        )
+        axs[sector].hist(
+            vertex_z[solid_cut],
+            bins=100,
+            range=(-12, 5),
+            color="r",
+            label=solid_target_name,
+            alpha=0.8,
+            density=True,
+        )
+        axs[sector].set_xlabel("$v_{z}$ (cm)")
+        axs[sector].set_title(f"Sector {sector+1}")
+        axs[sector].legend(loc="upper left")
+
+    fig.tight_layout()
+    if plot_title is not None:
+        plt.suptitle(plot_title, y=1.0)
+    if plots_directory is not None:
+        plt.savefig(plots_directory + "target_selections_normalized.png")
+
     plt.close()
 
 
@@ -1605,6 +1670,22 @@ def apply_target_selection(
     number_of_initial_electrons=None,
 ):
     num_sectors = 6
+
+    has_fmt = events["reconstructed"]["ftrack_vz"] > -9999
+    reco = events["reconstructed"]
+
+    for c in ("x", "y", "z"):
+        reco = ak.with_field(
+            reco,
+            ak.where(
+                has_fmt,
+                reco[f"ftrack_v{c}"],
+                reco[f"v_{c}"],
+            ),
+            f"v_{c}",
+        )
+    events = ak.with_field(events, reco, "reconstructed")
+
     electrons = events["reconstructed"]
 
     if develop_cuts:
