@@ -39,6 +39,9 @@ BRANCHES_TO_OPEN:
   - x
   - y
   - W
+  - ftrack_vx
+  - ftrack_vy
+  - ftrack_vz
 
 BRANCHES_TO_SAVE:
   - pid
@@ -81,6 +84,9 @@ BRANCHES_TO_SAVE:
   - x
   - y
   - W
+  - ftrack_vx
+  - ftrack_vy
+  - ftrack_vz
 
 ELECTRON_SELECTION_BRANCHES_TO_SAVE:
   - p_x
