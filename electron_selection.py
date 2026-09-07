@@ -46,6 +46,11 @@ PASS1_BRANCHES_TO_OPEN = [
     "SF",
     "p",
     "v_z",
+    "v_x",
+    "v_y",
+    "ftrack_vx",
+    "ftrack_vy",
+    "ftrack_vz",
 ]
 
 
@@ -213,6 +218,11 @@ def run_cut_pipeline(
     if number_of_initial_electrons is None:
         number_of_initial_electrons = len(events_array)
 
+    events_array = apply_status_cut(
+        events_array,
+        log_file=flags.log_file,
+        number_of_initial_electrons=number_of_initial_electrons,
+    )
     events_array = apply_kinematic_cuts(
         events_array,
         parameters["ELECTRON_KINEMATIC_CUTS"],
@@ -228,11 +238,6 @@ def run_cut_pipeline(
         save_plots=save_plots,
         plots_directory=flags.plots_directory,
         plot_title=plot_title,
-        log_file=flags.log_file,
-        number_of_initial_electrons=number_of_initial_electrons,
-    )
-    events_array = apply_status_cut(
-        events_array,
         log_file=flags.log_file,
         number_of_initial_electrons=number_of_initial_electrons,
     )
