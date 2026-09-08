@@ -1,3 +1,4 @@
+import concurrent.futures as cf
 import os
 import sys
 
@@ -350,9 +351,49 @@ def normalize_to_absolute_cross_section(
     return normalized_counts / (1000 * 1000), normalized_errors / (1000 * 1000)
 
 
+def _histogram_one_file(
+    input_file, parameters, x_binning, Q2_binning, targets, log_file, nmax=None
+):
+    """Opens one file and returns only its (x, Q2) count histograms -- a fixed-size
+    array per target rather than the events, so a worker hands back kilobytes."""
+    data_array = open_data(
+        data_paths=[input_file],
+        branches_to_open=parameters["BRANCHES_TO_LOAD"],
+        data_tree_name="reconstructed_electrons",
+        nmax=nmax,
+        get_meta_info=True,
+        log_file=log_file,
+    )
+    reconstructed = data_array["reconstructed"]
+    meta_info = data_array["meta_info"]
+
+    # total_luminosity is a per-run constant broadcast to every event, hence
+    # the [0] on each run's slice.
+    run_numbers = np.asarray(meta_info["run_number"])
+    luminosities = np.asarray(meta_info["total_luminosity"])
+    luminosity_by_run = {}
+    for run in np.unique(run_numbers):
+        luminosity_by_run[run] = luminosities[run_numbers == run][0]
+
+    pass_reco = np.asarray(reconstructed["pass_reco"])
+    selected = reconstructed[reconstructed["pass_reco"]]
+
+    histograms = {}
+    for target in targets:
+        target_mask = selected["target"] == target
+        histograms[target], _, _ = np.histogram2d(
+            np.asarray(selected["x"][target_mask]),
+            np.asarray(selected["Q2"][target_mask]),
+            bins=(x_binning, Q2_binning),
+        )
+
+    return histograms, luminosity_by_run, len(pass_reco), int(np.sum(pass_reco))
+
+
 def accumulate_counts(input_files, parameters, x_binning, Q2_binning, targets, flags):
-    """Fills one overall (x, Q2) count histogram per target, one input file at a
-    time, so only a single file's events are ever held in memory."""
+    """Fills one overall (x, Q2) count histogram per target. Each file is opened,
+    histogrammed and dropped on its own, so at most --num_processes files are in
+    memory at a time rather than the whole run."""
     histograms = {
         target: np.zeros((len(x_binning) - 1, len(Q2_binning) - 1))
         for target in targets
@@ -360,49 +401,62 @@ def accumulate_counts(input_files, parameters, x_binning, Q2_binning, targets, f
     luminosity_by_run = {}
     num_events = 0
     num_pass_reco = 0
-    remaining_events = flags.nmax
 
-    for input_file in input_files:
-        if remaining_events is not None and remaining_events <= 0:
-            break
-
-        data_array = open_data(
-            data_paths=[input_file],
-            branches_to_open=parameters["BRANCHES_TO_LOAD"],
-            data_tree_name="reconstructed_electrons",
-            nmax=remaining_events,
-            get_meta_info=True,
-            log_file=flags.log_file,
-        )
-        reconstructed = data_array["reconstructed"]
-        meta_info = data_array["meta_info"]
-
-        # total_luminosity is a per-run constant broadcast to every event, hence
-        # the [0] on each run's slice.
-        run_numbers = np.asarray(meta_info["run_number"])
-        luminosities = np.asarray(meta_info["total_luminosity"])
-        for run in np.unique(run_numbers):
-            luminosity_by_run[run] = luminosities[run_numbers == run][0]
-
-        pass_reco = np.asarray(reconstructed["pass_reco"])
-        num_events += len(pass_reco)
-        num_pass_reco += np.sum(pass_reco)
-        if remaining_events is not None:
-            remaining_events -= len(pass_reco)
-
-        selected = reconstructed[reconstructed["pass_reco"]]
+    def add_file_result(result):
+        nonlocal num_events, num_pass_reco
+        file_histograms, file_luminosities, file_events, file_pass_reco = result
         for target in targets:
-            target_mask = selected["target"] == target
-            file_histogram, _, _ = np.histogram2d(
-                np.asarray(selected["x"][target_mask]),
-                np.asarray(selected["Q2"][target_mask]),
-                bins=(x_binning, Q2_binning),
-            )
-            histograms[target] += file_histogram
-            del file_histogram, target_mask
+            histograms[target] += file_histograms[target]
+        luminosity_by_run.update(file_luminosities)
+        num_events += file_events
+        num_pass_reco += file_pass_reco
 
-        del selected, pass_reco, run_numbers, luminosities
-        del reconstructed, meta_info, data_array
+    # nmax is a budget across all files, so it only makes sense while they are
+    # read in order -- it forces the serial path.
+    njobs = max(1, min(flags.num_processes, len(input_files)))
+    if flags.nmax is not None and njobs > 1:
+        print(
+            f"WARNING: --nmax is set, so using 1 process instead of {njobs} -- the "
+            "event budget is shared across files and only holds if they are read "
+            "in order"
+        )
+        njobs = 1
+
+    if njobs == 1:
+        remaining_events = flags.nmax
+        for input_file in input_files:
+            if remaining_events is not None and remaining_events <= 0:
+                break
+            result = _histogram_one_file(
+                input_file,
+                parameters,
+                x_binning,
+                Q2_binning,
+                targets,
+                flags.log_file,
+                remaining_events,
+            )
+            add_file_result(result)
+            if remaining_events is not None:
+                remaining_events -= result[2]
+    else:
+        print(f"Histogramming {len(input_files)} files using {njobs} processes...")
+        with cf.ProcessPoolExecutor(max_workers=njobs) as executor:
+            futures = {
+                executor.submit(
+                    _histogram_one_file,
+                    input_file,
+                    parameters,
+                    x_binning,
+                    Q2_binning,
+                    targets,
+                    flags.log_file,
+                ): input_file
+                for input_file in input_files
+            }
+            for future in cf.as_completed(futures):
+                add_file_result(future.result())
+                print(f"Done {futures[future]}")
 
     return histograms, luminosity_by_run, num_events, num_pass_reco
 
