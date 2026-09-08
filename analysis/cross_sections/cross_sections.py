@@ -138,6 +138,12 @@ def parse_arguments():
         "--solid_target", default="C", type=str, help="Name of solid target"
     )
     parser.add_argument(
+        "--binning_file",
+        default=analysis_options.BINNING_FILE,
+        type=str,
+        help="JSON file with the x and Q2 bin edges, written by derive_xQ2_binning.py",
+    )
+    parser.add_argument(
         "--num_processes", default=16, type=int, help="Number of processes"
     )
     parser.add_argument("--log_file", default=None, type=str, help="Name of log file")
@@ -185,8 +191,7 @@ def main():
 
     # The binning is shared across targets so that target-to-target ratios stay
     # comparable bin by bin.
-    x_bin_edges = analysis_options.x_bins_by_target[flags.solid_target]
-    Q2_bin_edges = analysis_options.Q2_bins_by_target[flags.solid_target]
+    x_bin_edges, Q2_bin_edges = analysis_options.get_x_Q2_binning(flags.binning_file)
 
     counts_by_target, luminosity_by_run, num_events, num_pass_reco = accumulate_counts(
         input_files, parameters, x_bin_edges, Q2_bin_edges, targets, flags

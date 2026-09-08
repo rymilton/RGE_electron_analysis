@@ -1,3 +1,6 @@
+import os
+import sys
+
 import ROOT
 import numpy as np
 import yaml
@@ -6,6 +9,9 @@ from analysis_dataloader import AnalysisDataloader
 import awkward as ak
 import mplhep as hep
 import pandas as pd
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from utils import open_data
 
 hep.style.use(hep.style.CMS)
 from cycler import cycler
@@ -344,16 +350,71 @@ def normalize_to_absolute_cross_section(
     return normalized_counts / (1000 * 1000), normalized_errors / (1000 * 1000)
 
 
+def accumulate_counts(input_files, parameters, x_binning, Q2_binning, targets, flags):
+    """Fills one overall (x, Q2) count histogram per target, one input file at a
+    time, so only a single file's events are ever held in memory."""
+    histograms = {
+        target: np.zeros((len(x_binning) - 1, len(Q2_binning) - 1))
+        for target in targets
+    }
+    luminosity_by_run = {}
+    num_events = 0
+    num_pass_reco = 0
+    remaining_events = flags.nmax
+
+    for input_file in input_files:
+        if remaining_events is not None and remaining_events <= 0:
+            break
+
+        data_array = open_data(
+            data_paths=[input_file],
+            branches_to_open=parameters["BRANCHES_TO_LOAD"],
+            data_tree_name="reconstructed_electrons",
+            nmax=remaining_events,
+            get_meta_info=True,
+            log_file=flags.log_file,
+        )
+        reconstructed = data_array["reconstructed"]
+        meta_info = data_array["meta_info"]
+
+        # total_luminosity is a per-run constant broadcast to every event, hence
+        # the [0] on each run's slice.
+        run_numbers = np.asarray(meta_info["run_number"])
+        luminosities = np.asarray(meta_info["total_luminosity"])
+        for run in np.unique(run_numbers):
+            luminosity_by_run[run] = luminosities[run_numbers == run][0]
+
+        pass_reco = np.asarray(reconstructed["pass_reco"])
+        num_events += len(pass_reco)
+        num_pass_reco += np.sum(pass_reco)
+        if remaining_events is not None:
+            remaining_events -= len(pass_reco)
+
+        selected = reconstructed[reconstructed["pass_reco"]]
+        for target in targets:
+            target_mask = selected["target"] == target
+            file_histogram, _, _ = np.histogram2d(
+                np.asarray(selected["x"][target_mask]),
+                np.asarray(selected["Q2"][target_mask]),
+                bins=(x_binning, Q2_binning),
+            )
+            histograms[target] += file_histogram
+            del file_histogram, target_mask
+
+        del selected, pass_reco, run_numbers, luminosities
+        del reconstructed, meta_info, data_array
+
+    return histograms, luminosity_by_run, num_events, num_pass_reco
+
+
 # Calculating the double differential cross section w.r.t. x and Q2
-# By default, it does the cross section for reco-level with no unfolding
+# Takes the already-filled 2D (x, Q2) count histogram, so the events themselves
+# never have to be held in memory here
 def calculate_cross_sections(
-    dataloader,
-    target_name,
+    counts,
     x_binning,
     Q2_binning,
     integrated_luminosity,
-    weights=None,
-    use_truth=False,
     apply_radiative_corrections=False,
     radiative_corrections_df=None,
     efficiency_file=None,
@@ -361,26 +422,7 @@ def calculate_cross_sections(
     min_efficiency=0.01,
     report_name=None,
 ):
-    if use_truth:
-        data_to_use = dataloader.MC[dataloader.pass_truth]
-        x = data_to_use["MC_x"]
-        Q2 = data_to_use["MC_Q2"]
-    else:
-        data_to_use = dataloader.reconstructed[dataloader.pass_reco]
-        target_mask = data_to_use["target"] == target_name
-        x = data_to_use["x"][target_mask]
-        Q2 = data_to_use["Q2"][target_mask]
-
-    if weights is None:
-        weights = np.ones(len(x))
-
-    # Calculating the non-normalized cross sections and errors
-    nonnormalized_cross_sections, _, _ = np.histogram2d(
-        np.array(x),
-        np.array(Q2),
-        bins=(x_binning, Q2_binning),
-        weights=np.array(weights),
-    )
+    nonnormalized_cross_sections = np.asarray(counts, dtype=float)
     nonnormalized_cross_sections_errors = np.sqrt(nonnormalized_cross_sections)
 
     if apply_radiative_corrections:

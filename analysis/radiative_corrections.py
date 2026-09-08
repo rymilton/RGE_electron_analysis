@@ -142,9 +142,8 @@ if __name__ == "__main__":
     flags = parse_arguments()
     print(f"Getting EXTERNALS input for {flags.target_name}")
 
-    x_bins = analysis_options.x_bins_by_target[flags.target_name]
+    x_bins, Q2_bins = analysis_options.get_x_Q2_binning()
     x_bin_centers = (x_bins[1:] + x_bins[:-1]) / 2
-    Q2_bins = analysis_options.Q2_bins_by_target[flags.target_name]
     Q2_bin_centers = (Q2_bins[1:] + Q2_bins[:-1]) / 2
 
     x_padded, Q2_padded = np.meshgrid(x_bin_centers, Q2_bin_centers)

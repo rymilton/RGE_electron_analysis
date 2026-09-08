@@ -130,8 +130,7 @@ def main():
     # ---------------------------
     # Define binning
     # ---------------------------
-    Q2_binning = analysis_options.Q2_bins_by_target[flags.solid_target]
-    x_binning = analysis_options.x_bins_by_target[flags.solid_target]
+    x_binning, Q2_binning = analysis_options.get_x_Q2_binning()
     x_centers = 0.5 * (x_binning[:-1] + x_binning[1:])
     Q2_centers = 0.5 * (Q2_binning[:-1] + Q2_binning[1:])
 
