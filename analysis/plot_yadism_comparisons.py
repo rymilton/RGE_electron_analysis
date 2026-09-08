@@ -21,20 +21,6 @@ hep.style.use(hep.style.CMS)
 
 DEFAULT_BINNING_FILE = os.path.join(os.path.dirname(__file__), "xQ2_binning.json")
 
-SOLID_RUN_FILES = {
-    20030: "/volatile/clas12/rmilton/rge_datasets/pass1/torus-1/C_D2/carbon_cross_sections.csv",
-    20082: "/home/rmilton/work_dir/rge_datasets/phys_val/020082/Pb_cross_sections.csv",
-    20226: "/home/rmilton/work_dir/rge_datasets/phys_val/020226/Cu_cross_sections.csv",
-    20417: "/home/rmilton/work_dir/rge_datasets/phys_val/020417/Sn_cross_sections.csv",
-    20485: "/home/rmilton/work_dir/rge_datasets/phys_val/020485/Al_cross_sections.csv",
-}
-DEUTERIUM_RUN_FILES = {
-    20030: "/volatile/clas12/rmilton/rge_datasets/pass1/torus-1/C_D2/LD2_cross_sections.csv",
-    20082: "/home/rmilton/work_dir/rge_datasets/phys_val/020082/LD2_cross_sections.csv",
-    20226: "/home/rmilton/work_dir/rge_datasets/phys_val/020226/LD2_cross_sections.csv",
-    20417: "/home/rmilton/work_dir/rge_datasets/phys_val/020417/LD2_cross_sections.csv",
-    20485: "/home/rmilton/work_dir/rge_datasets/phys_val/020485/LD2_cross_sections.csv",
-}
 YADISM_SOLID_FILES = {
     "C": "/home/rmilton/work_dir/rge_datasets/C_yadsismpredictions.csv",
     "Cu": "/home/rmilton/work_dir/rge_datasets/Cu_yadsismpredictions.csv",
@@ -56,18 +42,23 @@ PANEL_HEIGHT = 5.8
 
 def parse_arguments():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--run_number", default=20030, type=int)
+    parser.add_argument(
+        "--run_number",
+        default=None,
+        help="Run number. Only labels the plots and output file names",
+        type=int,
+    )
     parser.add_argument("--target", default="C", type=str)
     parser.add_argument(
         "--solid_file",
-        default=None,
-        help="RGE solid-target cross section .csv. Defaults to the run number's entry",
+        required=True,
+        help="RGE solid-target cross section .csv, from cross_sections.py",
         type=str,
     )
     parser.add_argument(
         "--deuterium_file",
-        default=None,
-        help="RGE deuterium cross section .csv. Defaults to the run number's entry",
+        required=True,
+        help="RGE deuterium cross section .csv, from cross_sections.py",
         type=str,
     )
     parser.add_argument(
@@ -380,17 +371,15 @@ def main():
     flags = parse_arguments()
     os.makedirs(flags.output_directory, exist_ok=True)
 
-    solid_file = flags.solid_file or SOLID_RUN_FILES[flags.run_number]
-    deuterium_file = flags.deuterium_file or DEUTERIUM_RUN_FILES[flags.run_number]
     yadism_solid_file = flags.yadism_solid_file or YADISM_SOLID_FILES[flags.target]
 
-    print("RGE solid target file:", solid_file)
-    print("RGE deuterium file:", deuterium_file)
+    print("RGE solid target file:", flags.solid_file)
+    print("RGE deuterium file:", flags.deuterium_file)
     print("Yadism solid target file:", yadism_solid_file)
     print("Yadism deuterium file:", flags.yadism_deuterium_file)
 
-    RGE_solid_df = read_RGE_csv(solid_file)
-    RGE_deuterium_df = read_RGE_csv(deuterium_file)
+    RGE_solid_df = read_RGE_csv(flags.solid_file)
+    RGE_deuterium_df = read_RGE_csv(flags.deuterium_file)
     yadism_solid_df = read_yadism_csv(yadism_solid_file)
     yadism_deuterium_df = read_yadism_csv(flags.yadism_deuterium_file)
 
@@ -403,10 +392,13 @@ def main():
     report_grid_overlap(RGE_solid_df, yadism_solid_df, "Solid target")
     report_grid_overlap(RGE_deuterium_df, yadism_deuterium_df, "Deuterium")
 
+    run_label = "RGE" if flags.run_number is None else f"RGE {flags.run_number}"
+    file_prefix = run_label.replace(" ", "_")
+
     def output_path(name):
         return os.path.join(
             flags.output_directory,
-            f"RGE_{flags.target}_{flags.run_number}_{name}.png",
+            f"{file_prefix}_{flags.target}_{name}.png",
         )
 
     plot_cross_sections(
@@ -416,7 +408,7 @@ def main():
         x_limits,
         flags.cross_section_name,
         flags.max_relative_error,
-        f"RGE {flags.run_number}: {flags.target} reconstructed",
+        f"{run_label}: {flags.target} reconstructed",
         output_path("reco_crosssections"),
     )
     plot_cross_sections(
@@ -426,7 +418,7 @@ def main():
         x_limits,
         flags.cross_section_name,
         flags.max_relative_error,
-        f"RGE {flags.run_number}: LD2 reconstructed",
+        f"{run_label}: LD2 reconstructed",
         output_path("LD2_reco_crosssections"),
     )
     plot_data_over_yadism(
@@ -435,7 +427,7 @@ def main():
         Q2_bin_centers,
         x_limits,
         flags.cross_section_name,
-        f"RGE {flags.run_number}: {flags.target} reconstructed",
+        f"{run_label}: {flags.target} reconstructed",
         output_path("data_over_yadism"),
     )
     plot_solid_over_deuterium(
@@ -446,7 +438,7 @@ def main():
         Q2_bin_centers,
         x_limits,
         flags.ratio_cross_section_name,
-        f"RGE {flags.run_number}: {flags.target} reconstructed",
+        f"{run_label}: {flags.target} reconstructed",
         output_path("solid_over_deuterium"),
     )
 
