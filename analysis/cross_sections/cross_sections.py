@@ -19,8 +19,8 @@ from analysis_dataloader import AnalysisDataloader
 import analysis_options
 from radiative_corrections import OpenCorrections
 from analysis_helpers import (
+    accumulate_counts,
     calculate_cross_sections,
-    kinematic_fill_fraction,
     coarse_Q2_grouping,
     plot_cross_sections,
 )
@@ -181,24 +181,15 @@ def main():
     parameters = LoadYaml(flags.config, flags.config_directory)
 
     input_files = get_input_files(flags)
-    njobs = max(1, min(flags.num_processes, len(input_files)))
+    targets = [flags.solid_target, "LD2"]
 
-    data_array = open_data(
-        data_paths=input_files,
-        branches_to_open=parameters["BRANCHES_TO_LOAD"],
-        data_tree_name="reconstructed_electrons",
-        nmax=flags.nmax,
-        get_meta_info=True,
-        num_processes=njobs,
-        log_file=flags.log_file,
-    )
+    # The binning is shared across targets so that target-to-target ratios stay
+    # comparable bin by bin.
+    x_bin_edges = analysis_options.x_bins_by_target[flags.solid_target]
+    Q2_bin_edges = analysis_options.Q2_bins_by_target[flags.solid_target]
 
-    # No train/test split here and histogramming is order-independent, so
-    # shuffling would only cost a full permutation copy of the combined array.
-    data_dataloader = AnalysisDataloader(
-        reconstructed=data_array["reconstructed"],
-        MC=None,
-        shuffle=False,
+    counts_by_target, luminosity_by_run, num_events, num_pass_reco = accumulate_counts(
+        input_files, parameters, x_bin_edges, Q2_bin_edges, targets, flags
     )
 
     if flags.use_unfolding:
@@ -252,32 +243,17 @@ def main():
     # In the output file, have unfolded and non-unfolded cross sections
     output_dataframes = {flags.solid_target: pd.DataFrame({}), "LD2": pd.DataFrame({})}
 
-    # The luminosity is per-run, not per-target, so this is computed once for
-    # both targets. total_luminosity is a per-run constant broadcast to every
-    # event, hence the [0] on each run's slice.
-    run_numbers = np.asarray(data_array["meta_info"]["run_number"])
-    luminosities = np.asarray(data_array["meta_info"]["total_luminosity"])
-
-    unique_runs = np.unique(run_numbers)
-    print("Unique run numbers: ", unique_runs)
-
-    total_integrated_luminosity = 0
-    for run in unique_runs:
-        run_mask = run_numbers == run
-        total_integrated_luminosity += luminosities[run_mask][0]
-
+    # The luminosity is per-run, not per-target, so this is counted once for both
+    # targets.
+    print("Unique run numbers: ", sorted(luminosity_by_run))
+    total_integrated_luminosity = sum(luminosity_by_run.values())
     print(f"Total integrated luminosity: {total_integrated_luminosity}")
 
-    fraction_pass_reco = np.sum(data_dataloader.pass_reco) / len(
-        data_dataloader.pass_reco
-    )
-    print("Fraction pass reco: ", fraction_pass_reco)
+    print("Fraction pass reco: ", num_pass_reco / num_events)
 
     os.makedirs(flags.plots_directory, exist_ok=True)
 
-    for target_name in [flags.solid_target, "LD2"]:
-        x_bin_edges = analysis_options.x_bins_by_target[target_name]
-        Q2_bin_edges = analysis_options.Q2_bins_by_target[target_name]
+    for target_name in targets:
         x_bin_centers = (x_bin_edges[1:] + x_bin_edges[:-1]) / 2
         Q2_bin_centers = (Q2_bin_edges[1:] + Q2_bin_edges[:-1]) / 2
 
@@ -291,8 +267,7 @@ def main():
             absolute_cross_section_norad_nounfolding,
             absolute_cross_section_norad_nounfolding_errors,
         ) = calculate_cross_sections(
-            dataloader=data_dataloader,
-            target_name=target_name,
+            counts=counts_by_target[target_name],
             x_binning=x_bin_edges,
             Q2_binning=Q2_bin_edges,
             apply_radiative_corrections=False,
@@ -327,15 +302,14 @@ def main():
                 absolute_cross_section_withrad_nounfolding,
                 absolute_cross_section_withrad_nounfolding_errors,
             ) = calculate_cross_sections(
-                dataloader=data_dataloader,
-                target_name=target_name,
+                counts=counts_by_target[target_name],
                 x_binning=x_bin_edges,
                 Q2_binning=Q2_bin_edges,
                 apply_radiative_corrections=True,
                 integrated_luminosity=total_integrated_luminosity,
                 efficiency_file=flags.efficiency_file,
-            min_bin_fill=flags.min_bin_fill,
-            min_efficiency=flags.min_efficiency,
+                min_bin_fill=flags.min_bin_fill,
+                min_efficiency=flags.min_efficiency,
                 radiative_corrections_df=radiative_corrections_dictionary[target_name],
             )
             output_dataframes[target_name][
@@ -368,8 +342,8 @@ def main():
                 apply_radiative_corrections=True,
                 integrated_luminosity=total_integrated_luminosity,
                 efficiency_file=flags.efficiency_file,
-            min_bin_fill=flags.min_bin_fill,
-            min_efficiency=flags.min_efficiency,
+                min_bin_fill=flags.min_bin_fill,
+                min_efficiency=flags.min_efficiency,
                 radiative_corrections_df=radiative_corrections_dictionary[target_name],
                 use_truth=True,
                 weights=step2_weights,
