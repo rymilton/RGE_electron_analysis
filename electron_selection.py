@@ -207,20 +207,22 @@ def run_cut_pipeline(
     plot_title,
     develop_cuts,
     save_plots,
+    log_file,
     number_of_initial_electrons=None,
 ):
     """Runs the full kinematic/fiducial/partial-SF/SF/status/target cut
     pipeline on whatever array it's given. develop_cuts toggles whether the
     fit-based cut functions (partial sampling, sampling fraction, target)
     re-fit from this data or load previously-cached cut parameters.
-    save_plots is explicit (rather than read from flags) so callers can force
-    plotting off independent of the top-level --save_plots flag."""
+    save_plots and log_file are explicit (rather than read from flags) so
+    callers can force plotting/logging off independent of the top-level
+    --save_plots/--log_file flags."""
     if number_of_initial_electrons is None:
         number_of_initial_electrons = len(events_array)
 
     events_array = apply_status_cut(
         events_array,
-        log_file=flags.log_file,
+        log_file=log_file,
         number_of_initial_electrons=number_of_initial_electrons,
     )
     events_array = apply_kinematic_cuts(
@@ -229,7 +231,7 @@ def run_cut_pipeline(
         save_plots=save_plots,
         plots_directory=flags.plots_directory,
         plot_title=plot_title,
-        log_file=flags.log_file,
+        log_file=log_file,
         number_of_initial_electrons=number_of_initial_electrons,
     )
     events_array = apply_fiducial_cuts(
@@ -238,7 +240,7 @@ def run_cut_pipeline(
         save_plots=save_plots,
         plots_directory=flags.plots_directory,
         plot_title=plot_title,
-        log_file=flags.log_file,
+        log_file=log_file,
         number_of_initial_electrons=number_of_initial_electrons,
     )
     events_array = apply_partial_sampling_fraction_cut(
@@ -249,7 +251,7 @@ def run_cut_pipeline(
         save_plots=save_plots,
         plots_directory=flags.plots_directory,
         plot_title=plot_title,
-        log_file=flags.log_file,
+        log_file=log_file,
         number_of_initial_electrons=number_of_initial_electrons,
     )
     events_array = apply_sampling_fraction_cut(
@@ -259,7 +261,7 @@ def run_cut_pipeline(
         save_plots=save_plots,
         plots_directory=flags.plots_directory,
         plot_title=plot_title,
-        log_file=flags.log_file,
+        log_file=log_file,
         number_of_initial_electrons=number_of_initial_electrons,
     )
     if flags.target_selection:
@@ -271,7 +273,7 @@ def run_cut_pipeline(
             save_plots=save_plots,
             plots_directory=flags.plots_directory,
             plot_title=plot_title,
-            log_file=flags.log_file,
+            log_file=log_file,
             number_of_initial_electrons=number_of_initial_electrons,
         )
 
@@ -302,7 +304,7 @@ def _pad_failed_trigger_events(failed_arr, n, target_selection):
 
 
 def run_cut_pipeline_respecting_trigger(
-    events_array, flags, parameters, plot_title, develop_cuts, save_plots
+    events_array, flags, parameters, plot_title, develop_cuts, save_plots, log_file
 ):
     """Only feeds events with has_trigger_electron == True into the cut
     pipeline. If has_trigger_electron isn't in the file at all (older
@@ -312,7 +314,13 @@ def run_cut_pipeline_respecting_trigger(
     for every field the cut pipeline would otherwise have added."""
     if "has_trigger_electron" not in events_array["reconstructed"].fields:
         return run_cut_pipeline(
-            events_array, flags, parameters, plot_title, develop_cuts, save_plots
+            events_array,
+            flags,
+            parameters,
+            plot_title,
+            develop_cuts,
+            save_plots,
+            log_file,
         )
 
     number_of_initial_electrons = len(events_array)
@@ -324,6 +332,12 @@ def run_cut_pipeline_respecting_trigger(
     num_trigger_electrons = len(passed)
 
     print(f"Have {num_trigger_electrons} events with trigger electrons!")
+    if log_file is not None:
+        with open(log_file, "a") as f:
+            f.write(
+                f"Have {num_trigger_electrons} events with trigger electrons "
+                f"out of {number_of_initial_electrons} events\n"
+            )
 
     passed, _ = run_cut_pipeline(
         passed,
@@ -332,6 +346,7 @@ def run_cut_pipeline_respecting_trigger(
         plot_title,
         develop_cuts,
         save_plots,
+        log_file,
         number_of_initial_electrons=num_trigger_electrons,
     )
 
@@ -379,7 +394,10 @@ def apply_and_save_one_file(path, flags, parameters, plot_title):
         ),
         gen_tree_name="gen_electrons",
         nmax=flags.nmax,
-        log_file=flags.log_file,
+        # Pass 2 never logs: the log describes the combined statistics from
+        # Pass 1, and one block per input file (interleaved across parallel
+        # workers) would swamp it.
+        log_file=None,
     )
     events_array, _ = run_cut_pipeline_respecting_trigger(
         events_array,
@@ -388,6 +406,7 @@ def apply_and_save_one_file(path, flags, parameters, plot_title):
         plot_title,
         develop_cuts=False,
         save_plots=False,
+        log_file=None,
     )
     events_array = add_luminosity_info(events_array, flags)
 
@@ -444,6 +463,7 @@ def main():
         plot_title,
         develop_cuts=flags.develop_cuts,
         save_plots=flags.save_plots,
+        log_file=flags.log_file,
     )
     if flags.develop_cuts:
         print(
