@@ -9,3 +9,5 @@ analysis/crosscheck.txt
 *.png
 *.pdf
 *.ipynb_checkpoints
+*.csv
+*.out
