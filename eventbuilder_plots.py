@@ -3,7 +3,8 @@
 # 1. PCAL energy cut
 # 2. HTCC photoelectron cut
 # 3. SF vs Edep fit plot
-# The starting point of this file should be charged tracks for all events, even those without a trigger electron.
+# The starting point of this file should be charged tracks for all events, and separately for only events with a trigger electron
+# (since events without one are dropped later anyway). Each set of plots is saved in its own subdirectory.
 # The input files should be those coming from the tuple maker
 # In these plots, use all negative tracks.
 # Similar to the other scripts, this should be done either for an array of input files or a single file.
@@ -20,8 +21,10 @@ from utils import LoadYaml, open_data
 
 hep.style.use("CMS")
 
-# Per-track branches from tuple_maker.cpp's "reconstructed" tree (multiple tracks per event, i.e. 2D arrays)
+# Branches from tuple_maker.cpp's "reconstructed" tree. All are per-track (multiple tracks per event, i.e. 2D arrays)
+# except has_trigger_electron, which is per-event
 BRANCHES_TO_OPEN = [
+    "has_trigger_electron",
     "track_charge",
     "p",
     "sector",
@@ -119,10 +122,14 @@ def get_plot_title(flags, parameters, events):
     return f"RG-E LD2 + {flags.solid_target} : {run_label} Pass 1"
 
 
-def get_negative_tracks(events):
-    # Keeps every event (including those without a trigger electron) and
-    # selects all negatively charged tracks within each event.
+def get_negative_tracks(events, require_trigger_electron):
+    # Selects all negatively charged tracks within each event, optionally only
+    # for events with a trigger electron. has_trigger_electron is removed after
+    # the event selection since it's per-event and can't be masked per-track.
     tracks = events["reconstructed"]
+    if require_trigger_electron:
+        tracks = tracks[tracks["has_trigger_electron"]]
+    tracks = ak.without_field(tracks, "has_trigger_electron")
     return tracks[tracks["track_charge"] < 0]
 
 
@@ -199,15 +206,21 @@ def main():
         num_processes=flags.num_processes,
     )
     plot_title = get_plot_title(flags, parameters, events)
-    negative_tracks = get_negative_tracks(events)
-    print(
-        f"Selected {ak.sum(ak.num(negative_tracks['track_charge']))} negative tracks "
-        f"from {len(negative_tracks)} events"
-    )
 
-    os.makedirs(flags.plots_directory, exist_ok=True)
-    plot_PCAL_energy(negative_tracks, plot_title, flags.plots_directory)
-    plot_HTCC_photoelectrons(negative_tracks, plot_title, flags.plots_directory)
+    for subdirectory, require_trigger_electron in [
+        ("all_events", False),
+        ("trigger_electron_events", True),
+    ]:
+        negative_tracks = get_negative_tracks(events, require_trigger_electron)
+        print(
+            f"{subdirectory}: selected {ak.sum(ak.num(negative_tracks['track_charge']))} "
+            f"negative tracks from {len(negative_tracks)} events"
+        )
+
+        plots_directory = os.path.join(flags.plots_directory, subdirectory)
+        os.makedirs(plots_directory, exist_ok=True)
+        plot_PCAL_energy(negative_tracks, plot_title, plots_directory)
+        plot_HTCC_photoelectrons(negative_tracks, plot_title, plots_directory)
 
 
 if __name__ == "__main__":
