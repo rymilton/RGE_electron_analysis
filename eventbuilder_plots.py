@@ -25,61 +25,61 @@ hep.style.use("CMS")
 # sf_mean() and sf_sigma()
 SF_CUT_PARAMETERS = {
     1: {
-        "sf1": 0.24614,
+        "sf1": 0.23372,
         "sf2": 1.0,
-        "sf3": -0.01600,
-        "sf4": 0.00070,
-        "sfs1": 0.01690,
+        "sf3": -0.01726,
+        "sf4": 0.00050,
+        "sfs1": 0.01763,
         "sfs2": 1.0,
         "sfs3": 0.0,
         "sfs4": 0.0,
     },
     2: {
-        "sf1": 0.24674,
+        "sf1": 0.24209,
         "sf2": 1.0,
-        "sf3": -0.01600,
-        "sf4": 0.00070,
-        "sfs1": 0.01867,
+        "sf3": -0.03649,
+        "sf4": 0.00063,
+        "sfs1": 0.02018,
         "sfs2": 1.0,
         "sfs3": 0.0,
         "sfs4": 0.0,
     },
     3: {
-        "sf1": 0.24992,
+        "sf1": 0.23375,
         "sf2": 1.0,
-        "sf3": -0.01602,
+        "sf3": -0.01600,
         "sf4": 0.00070,
-        "sfs1": 0.01879,
+        "sfs1": 0.01719,
         "sfs2": 1.0,
         "sfs3": 0.0,
         "sfs4": 0.0,
     },
     4: {
-        "sf1": 0.25123,
+        "sf1": 0.25006,
         "sf2": 1.0,
-        "sf3": -0.01633,
+        "sf3": -0.01613,
         "sf4": 0.00050,
-        "sfs1": 0.01706,
+        "sfs1": 0.01687,
         "sfs2": 1.0,
         "sfs3": 0.0,
         "sfs4": 0.0,
     },
     5: {
-        "sf1": 0.24796,
+        "sf1": 0.23677,
         "sf2": 1.0,
-        "sf3": -0.01600,
-        "sf4": 0.00070,
-        "sfs1": 0.01841,
+        "sf3": -0.01963,
+        "sf4": 0.00050,
+        "sfs1": 0.01744,
         "sfs2": 1.0,
         "sfs3": 0.0,
         "sfs4": 0.0,
     },
     6: {
-        "sf1": 0.24831,
+        "sf1": 0.23757,
         "sf2": 1.0,
         "sf3": -0.01600,
         "sf4": 0.00070,
-        "sfs1": 0.01789,
+        "sfs1": 0.01585,
         "sfs2": 1.0,
         "sfs3": 0.0,
         "sfs4": 0.0,
@@ -198,14 +198,26 @@ def get_negative_tracks(events, require_trigger_electron):
     return tracks[tracks["track_charge"] < 0]
 
 
-def plot_PCAL_energy(tracks, plot_title, plots_directory):
+def plot_PCAL_energy(tracks, plot_title, plots_directory, apply_cuts=False):
+    # apply_cuts=True keeps only tracks passing the HTCC (Nphe > 2) and SF
+    # (within mu +- 5 sigma) cuts
     sector = ak.to_numpy(ak.flatten(tracks["sector"]))
     E_PCAL = ak.to_numpy(ak.flatten(tracks["E_PCAL"]))
     E_EC = ak.to_numpy(ak.flatten(tracks["E_ECIN"] + tracks["E_ECOUT"]))
+    Nphe_HTCC = ak.to_numpy(ak.flatten(tracks["Nphe_HTCC"]))
+    E_dep = E_PCAL + E_EC
+    SF = E_dep / ak.to_numpy(ak.flatten(tracks["p"]))
 
     fig, axs = plt.subplots(2, 3, figsize=(30, 18))
     for i, ax in enumerate(axs.flatten()):
         sector_mask = sector == i + 1
+        if apply_cuts:
+            params = SF_CUT_PARAMETERS[i + 1]
+            # Tracks with E_dep = 0 give inf/nan for mu and sigma and fail the SF cut
+            with np.errstate(divide="ignore", invalid="ignore"):
+                mu = sf_mean(E_dep, params)
+                sigma = sf_sigma(E_dep, params)
+            sector_mask &= (Nphe_HTCC > 2) & (np.abs(SF - mu) < 5 * sigma)
         _, _, _, mesh = ax.hist2d(
             E_PCAL[sector_mask],
             E_EC[sector_mask],
@@ -225,7 +237,8 @@ def plot_PCAL_energy(tracks, plot_title, plots_directory):
 
     plt.suptitle(plot_title)
     plt.tight_layout()
-    plt.savefig(os.path.join(plots_directory, "PCAL_energy.png"))
+    file_name = "PCAL_energy_HTCC_SF_cuts.png" if apply_cuts else "PCAL_energy.png"
+    plt.savefig(os.path.join(plots_directory, file_name))
     plt.close()
 
 
@@ -268,16 +281,19 @@ def sf_sigma(E_dep, params):
     )
 
 
-def plot_sampling_fraction(tracks, plot_title, plots_directory):
+def plot_sampling_fraction(tracks, plot_title, plots_directory, apply_cuts=False):
+    # apply_cuts=True keeps only tracks passing the HTCC (Nphe > 2) and PCAL
+    # energy (E_PCAL > 0.06 GeV) cuts
     sector = ak.to_numpy(ak.flatten(tracks["sector"]))
-    E_dep = ak.to_numpy(
-        ak.flatten(tracks["E_PCAL"] + tracks["E_ECIN"] + tracks["E_ECOUT"])
-    )
+    E_PCAL = ak.to_numpy(ak.flatten(tracks["E_PCAL"]))
+    E_dep = E_PCAL + ak.to_numpy(ak.flatten(tracks["E_ECIN"] + tracks["E_ECOUT"]))
     SF = E_dep / ak.to_numpy(ak.flatten(tracks["p"]))
+    Nphe_HTCC = ak.to_numpy(ak.flatten(tracks["Nphe_HTCC"]))
+    pass_cuts = (Nphe_HTCC > 2) & (E_PCAL > 0.06) if apply_cuts else True
 
     fig, axs = plt.subplots(2, 3, figsize=(30, 18))
     for i, ax in enumerate(axs.flatten()):
-        sector_mask = sector == i + 1
+        sector_mask = (sector == i + 1) & pass_cuts
         _, _, _, mesh = ax.hist2d(
             E_dep[sector_mask],
             SF[sector_mask],
@@ -314,7 +330,12 @@ def plot_sampling_fraction(tracks, plot_title, plots_directory):
 
     plt.suptitle(plot_title)
     plt.tight_layout()
-    plt.savefig(os.path.join(plots_directory, "sampling_fraction.png"))
+    file_name = (
+        "sampling_fraction_HTCC_PCAL_cuts.png"
+        if apply_cuts
+        else "sampling_fraction.png"
+    )
+    plt.savefig(os.path.join(plots_directory, file_name))
     plt.close()
 
 
@@ -347,8 +368,12 @@ def main():
         plots_directory = os.path.join(flags.plots_directory, subdirectory)
         os.makedirs(plots_directory, exist_ok=True)
         plot_PCAL_energy(negative_tracks, plot_title, plots_directory)
+        plot_PCAL_energy(negative_tracks, plot_title, plots_directory, apply_cuts=True)
         plot_HTCC_photoelectrons(negative_tracks, plot_title, plots_directory)
         plot_sampling_fraction(negative_tracks, plot_title, plots_directory)
+        plot_sampling_fraction(
+            negative_tracks, plot_title, plots_directory, apply_cuts=True
+        )
 
 
 if __name__ == "__main__":
