@@ -210,7 +210,8 @@ def plot_PCAL_energy(tracks, plot_title, plots_directory, apply_cuts=False):
 
     fig, axs = plt.subplots(2, 3, figsize=(30, 18))
     for i, ax in enumerate(axs.flatten()):
-        sector_mask = sector == i + 1
+        # Tracks with no calorimeter energy at all would pile up in the (0, 0) bin
+        sector_mask = (sector == i + 1) & (E_dep > 0)
         if apply_cuts:
             params = SF_CUT_PARAMETERS[i + 1]
             # Tracks with E_dep = 0 give inf/nan for mu and sigma and fail the SF cut
@@ -226,7 +227,7 @@ def plot_PCAL_energy(tracks, plot_title, plots_directory, apply_cuts=False):
             norm=colors.LogNorm(),
         )
         ax.axvline(0.06, color="red", label="$E_{PCAL}$ > 0.06 GeV cut")
-        ax.legend()
+        ax.legend(frameon=True, facecolor="white", edgecolor="black", framealpha=1)
         ax.set_xlabel("$E_{PCAL}$ (GeV)")
         ax.set_ylabel("$E_{ECIN} + E_{ECOUT}$ (GeV)")
         ax.set_title(f"Sector {i + 1}")
@@ -293,7 +294,8 @@ def plot_sampling_fraction(tracks, plot_title, plots_directory, apply_cuts=False
 
     fig, axs = plt.subplots(2, 3, figsize=(30, 18))
     for i, ax in enumerate(axs.flatten()):
-        sector_mask = (sector == i + 1) & pass_cuts
+        # Tracks with no calorimeter energy at all would pile up in the (0, 0) bin
+        sector_mask = (sector == i + 1) & pass_cuts & (E_dep > 0)
         _, _, _, mesh = ax.hist2d(
             E_dep[sector_mask],
             SF[sector_mask],
@@ -318,7 +320,13 @@ def plot_sampling_fraction(tracks, plot_title, plots_directory, apply_cuts=False
         ax.plot(E_dep_curve, mu - 5 * sigma, color="black", linewidth=2)
         ax.set_xlim(0, 2.5)
         ax.set_ylim(0, 0.4)
-        ax.legend(loc="upper right")
+        ax.legend(
+            loc="upper right",
+            frameon=True,
+            facecolor="white",
+            edgecolor="black",
+            framealpha=1,
+        )
 
         ax.set_xlabel("$E_{dep, total}$ (GeV)")
         ax.set_ylabel("$E_{dep, total}/p$")
