@@ -21,6 +21,17 @@ from utils import LoadYaml, open_data
 
 hep.style.use("CMS")
 
+# Event builder sampling fraction cut parameters for each sector, used in
+# sf_mean() and sf_sigma()
+SF_CUT_PARAMETERS = {
+    1: {"sf1": 0.24614, "sf2": 1.0, "sf3": -0.01600, "sf4": 0.00070, "sfs1": 0.01690, "sfs2": 1.0, "sfs3": 0.0, "sfs4": 0.0},
+    2: {"sf1": 0.24674, "sf2": 1.0, "sf3": -0.01600, "sf4": 0.00070, "sfs1": 0.01867, "sfs2": 1.0, "sfs3": 0.0, "sfs4": 0.0},
+    3: {"sf1": 0.24992, "sf2": 1.0, "sf3": -0.01602, "sf4": 0.00070, "sfs1": 0.01879, "sfs2": 1.0, "sfs3": 0.0, "sfs4": 0.0},
+    4: {"sf1": 0.25123, "sf2": 1.0, "sf3": -0.01633, "sf4": 0.00050, "sfs1": 0.01706, "sfs2": 1.0, "sfs3": 0.0, "sfs4": 0.0},
+    5: {"sf1": 0.24796, "sf2": 1.0, "sf3": -0.01600, "sf4": 0.00070, "sfs1": 0.01841, "sfs2": 1.0, "sfs3": 0.0, "sfs4": 0.0},
+    6: {"sf1": 0.24831, "sf2": 1.0, "sf3": -0.01600, "sf4": 0.00070, "sfs1": 0.01789, "sfs2": 1.0, "sfs3": 0.0, "sfs4": 0.0},
+}
+
 # Branches from tuple_maker.cpp's "reconstructed" tree. All are per-track (multiple tracks per event, i.e. 2D arrays)
 # except has_trigger_electron, which is per-event
 BRANCHES_TO_OPEN = [
@@ -191,6 +202,58 @@ def plot_HTCC_photoelectrons(tracks, plot_title, plots_directory):
     plt.close()
 
 
+def sf_mean(E_dep, params):
+    return params["sf1"] * (params["sf2"] + params["sf3"] / E_dep + params["sf4"] / E_dep**2)
+
+
+def sf_sigma(E_dep, params):
+    return params["sfs1"] * (params["sfs2"] + params["sfs3"] / E_dep + params["sfs4"] / E_dep**2)
+
+
+def plot_sampling_fraction(tracks, plot_title, plots_directory):
+    sector = ak.to_numpy(ak.flatten(tracks["sector"]))
+    E_dep = ak.to_numpy(
+        ak.flatten(tracks["E_PCAL"] + tracks["E_ECIN"] + tracks["E_ECOUT"])
+    )
+    SF = E_dep / ak.to_numpy(ak.flatten(tracks["p"]))
+
+    fig, axs = plt.subplots(2, 3, figsize=(30, 18))
+    for i, ax in enumerate(axs.flatten()):
+        sector_mask = sector == i + 1
+        _, _, _, mesh = ax.hist2d(
+            E_dep[sector_mask],
+            SF[sector_mask],
+            bins=200,
+            range=[[0, 2.5], [0, 0.4]],
+            norm=colors.LogNorm(),
+        )
+
+        # Starting above 0 GeV since mu and sigma diverge as 1/E_dep^2
+        E_dep_curve = np.linspace(0.05, 2.5, 500)
+        params = SF_CUT_PARAMETERS[i + 1]
+        mu = sf_mean(E_dep_curve, params)
+        sigma = sf_sigma(E_dep_curve, params)
+        ax.plot(E_dep_curve, mu, color="red", linewidth=2, label="Mean SF")
+        ax.plot(E_dep_curve, mu + 5 * sigma, color="black", linewidth=2, label=r"$\pm 5\sigma$")
+        ax.plot(E_dep_curve, mu - 5 * sigma, color="black", linewidth=2)
+        ax.set_xlim(0, 2.5)
+        ax.set_ylim(0, 0.4)
+        ax.legend(loc="upper right")
+
+        ax.set_xlabel("$E_{dep, total}$ (GeV)")
+        ax.set_ylabel("$E_{dep, total}/p$")
+        ax.set_title(f"Sector {i + 1}")
+
+        divider = make_axes_locatable(ax)
+        cax = divider.append_axes("right", size="5%", pad=0.05)
+        fig.colorbar(mesh, cax=cax)
+
+    plt.suptitle(plot_title)
+    plt.tight_layout()
+    plt.savefig(os.path.join(plots_directory, "sampling_fraction.png"))
+    plt.close()
+
+
 def main():
     flags = parse_arguments()
     parameters = LoadYaml(flags.config, flags.config_directory)
@@ -221,6 +284,7 @@ def main():
         os.makedirs(plots_directory, exist_ok=True)
         plot_PCAL_energy(negative_tracks, plot_title, plots_directory)
         plot_HTCC_photoelectrons(negative_tracks, plot_title, plots_directory)
+        plot_sampling_fraction(negative_tracks, plot_title, plots_directory)
 
 
 if __name__ == "__main__":
