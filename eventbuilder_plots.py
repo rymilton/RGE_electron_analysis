@@ -157,6 +157,33 @@ def plot_PCAL_energy(tracks, plot_title, plots_directory):
     plt.close()
 
 
+def plot_HTCC_photoelectrons(tracks, plot_title, plots_directory):
+    sector = ak.to_numpy(ak.flatten(tracks["sector"]))
+    Nphe_HTCC = ak.to_numpy(ak.flatten(tracks["Nphe_HTCC"]))
+    # Tracks without an HTCC entry are -9999
+    has_HTCC = Nphe_HTCC != -9999
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+    for i in range(1, 7):
+        ax.hist(
+            Nphe_HTCC[(sector == i) & has_HTCC],
+            bins=np.arange(0, 76),
+            histtype="step",
+            linewidth=2,
+            density=True,
+            label=f"Sector {i}",
+        )
+    ax.axvline(2, color="red", label="$N_{phe}$ > 2 cut")
+    ax.legend()
+    ax.set_xlabel("HTCC $N_{phe}$")
+    ax.set_ylabel("Density")
+    ax.set_title(plot_title)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(plots_directory, "HTCC_photoelectrons.png"))
+    plt.close()
+
+
 def main():
     flags = parse_arguments()
     parameters = LoadYaml(flags.config, flags.config_directory)
@@ -180,6 +207,7 @@ def main():
 
     os.makedirs(flags.plots_directory, exist_ok=True)
     plot_PCAL_energy(negative_tracks, plot_title, flags.plots_directory)
+    plot_HTCC_photoelectrons(negative_tracks, plot_title, flags.plots_directory)
 
 
 if __name__ == "__main__":
