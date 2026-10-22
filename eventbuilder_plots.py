@@ -287,7 +287,7 @@ def plot_sampling_fraction(tracks, plot_title, plots_directory):
         )
 
         # Starting above 0 GeV since mu and sigma diverge as 1/E_dep^2
-        E_dep_curve = np.linspace(0.05, 2.5, 500)
+        E_dep_curve = np.linspace(0.000001, 2.5, 500)
         params = SF_CUT_PARAMETERS[i + 1]
         mu = sf_mean(E_dep_curve, params)
         sigma = sf_sigma(E_dep_curve, params)
