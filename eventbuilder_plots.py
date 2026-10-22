@@ -222,7 +222,7 @@ def plot_PCAL_energy(tracks, plot_title, plots_directory, apply_cuts=False):
             E_PCAL[sector_mask],
             E_EC[sector_mask],
             bins=200,
-            range=[[0, 1.5], [0, 1.5]],
+            range=[[0, 0.6], [0, 0.6]],
             norm=colors.LogNorm(),
         )
         ax.axvline(0.06, color="red", label="$E_{PCAL}$ > 0.06 GeV cut")
