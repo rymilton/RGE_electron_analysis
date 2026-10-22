@@ -24,12 +24,66 @@ hep.style.use("CMS")
 # Event builder sampling fraction cut parameters for each sector, used in
 # sf_mean() and sf_sigma()
 SF_CUT_PARAMETERS = {
-    1: {"sf1": 0.24614, "sf2": 1.0, "sf3": -0.01600, "sf4": 0.00070, "sfs1": 0.01690, "sfs2": 1.0, "sfs3": 0.0, "sfs4": 0.0},
-    2: {"sf1": 0.24674, "sf2": 1.0, "sf3": -0.01600, "sf4": 0.00070, "sfs1": 0.01867, "sfs2": 1.0, "sfs3": 0.0, "sfs4": 0.0},
-    3: {"sf1": 0.24992, "sf2": 1.0, "sf3": -0.01602, "sf4": 0.00070, "sfs1": 0.01879, "sfs2": 1.0, "sfs3": 0.0, "sfs4": 0.0},
-    4: {"sf1": 0.25123, "sf2": 1.0, "sf3": -0.01633, "sf4": 0.00050, "sfs1": 0.01706, "sfs2": 1.0, "sfs3": 0.0, "sfs4": 0.0},
-    5: {"sf1": 0.24796, "sf2": 1.0, "sf3": -0.01600, "sf4": 0.00070, "sfs1": 0.01841, "sfs2": 1.0, "sfs3": 0.0, "sfs4": 0.0},
-    6: {"sf1": 0.24831, "sf2": 1.0, "sf3": -0.01600, "sf4": 0.00070, "sfs1": 0.01789, "sfs2": 1.0, "sfs3": 0.0, "sfs4": 0.0},
+    1: {
+        "sf1": 0.24614,
+        "sf2": 1.0,
+        "sf3": -0.01600,
+        "sf4": 0.00070,
+        "sfs1": 0.01690,
+        "sfs2": 1.0,
+        "sfs3": 0.0,
+        "sfs4": 0.0,
+    },
+    2: {
+        "sf1": 0.24674,
+        "sf2": 1.0,
+        "sf3": -0.01600,
+        "sf4": 0.00070,
+        "sfs1": 0.01867,
+        "sfs2": 1.0,
+        "sfs3": 0.0,
+        "sfs4": 0.0,
+    },
+    3: {
+        "sf1": 0.24992,
+        "sf2": 1.0,
+        "sf3": -0.01602,
+        "sf4": 0.00070,
+        "sfs1": 0.01879,
+        "sfs2": 1.0,
+        "sfs3": 0.0,
+        "sfs4": 0.0,
+    },
+    4: {
+        "sf1": 0.25123,
+        "sf2": 1.0,
+        "sf3": -0.01633,
+        "sf4": 0.00050,
+        "sfs1": 0.01706,
+        "sfs2": 1.0,
+        "sfs3": 0.0,
+        "sfs4": 0.0,
+    },
+    5: {
+        "sf1": 0.24796,
+        "sf2": 1.0,
+        "sf3": -0.01600,
+        "sf4": 0.00070,
+        "sfs1": 0.01841,
+        "sfs2": 1.0,
+        "sfs3": 0.0,
+        "sfs4": 0.0,
+    },
+    6: {
+        "sf1": 0.24831,
+        "sf2": 1.0,
+        "sf3": -0.01600,
+        "sf4": 0.00070,
+        "sfs1": 0.01789,
+        "sfs2": 1.0,
+        "sfs3": 0.0,
+        "sfs4": 0.0,
+    },
 }
 
 # Branches from tuple_maker.cpp's "reconstructed" tree. All are per-track (multiple tracks per event, i.e. 2D arrays)
@@ -124,7 +178,7 @@ def get_plot_title(flags, parameters, events):
     if flags.simulation:
         return f"RG-E LD2 + {flags.solid_target} : {parameters['PLOT_TITLES'][flags.data_name]}"
     # Events without a RUN::config bank have run_number <= 0
-    run_numbers = np.unique(ak.to_numpy(events["meta_info"]["run_number"]))
+    run_numbers = np.unique(events["meta_info"]["run_number"])
     run_numbers = run_numbers[run_numbers > 0]
     if len(run_numbers) == 1:
         run_label = f"{run_numbers[0]}"
@@ -176,8 +230,8 @@ def plot_PCAL_energy(tracks, plot_title, plots_directory):
 
 
 def plot_HTCC_photoelectrons(tracks, plot_title, plots_directory):
-    sector = ak.to_numpy(ak.flatten(tracks["sector"]))
-    Nphe_HTCC = ak.to_numpy(ak.flatten(tracks["Nphe_HTCC"]))
+    sector = ak.flatten(tracks["sector"])
+    Nphe_HTCC = ak.flatten(tracks["Nphe_HTCC"])
     # Tracks without an HTCC entry are -9999
     has_HTCC = Nphe_HTCC != -9999
 
@@ -203,11 +257,15 @@ def plot_HTCC_photoelectrons(tracks, plot_title, plots_directory):
 
 
 def sf_mean(E_dep, params):
-    return params["sf1"] * (params["sf2"] + params["sf3"] / E_dep + params["sf4"] / E_dep**2)
+    return params["sf1"] * (
+        params["sf2"] + params["sf3"] / E_dep + params["sf4"] / E_dep**2
+    )
 
 
 def sf_sigma(E_dep, params):
-    return params["sfs1"] * (params["sfs2"] + params["sfs3"] / E_dep + params["sfs4"] / E_dep**2)
+    return params["sfs1"] * (
+        params["sfs2"] + params["sfs3"] / E_dep + params["sfs4"] / E_dep**2
+    )
 
 
 def plot_sampling_fraction(tracks, plot_title, plots_directory):
@@ -234,7 +292,13 @@ def plot_sampling_fraction(tracks, plot_title, plots_directory):
         mu = sf_mean(E_dep_curve, params)
         sigma = sf_sigma(E_dep_curve, params)
         ax.plot(E_dep_curve, mu, color="red", linewidth=2, label="Mean SF")
-        ax.plot(E_dep_curve, mu + 5 * sigma, color="black", linewidth=2, label=r"$\pm 5\sigma$")
+        ax.plot(
+            E_dep_curve,
+            mu + 5 * sigma,
+            color="black",
+            linewidth=2,
+            label=r"$\pm 5\sigma$",
+        )
         ax.plot(E_dep_curve, mu - 5 * sigma, color="black", linewidth=2)
         ax.set_xlim(0, 2.5)
         ax.set_ylim(0, 0.4)
