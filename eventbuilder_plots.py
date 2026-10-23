@@ -253,6 +253,54 @@ def plot_PCAL_energy(
     plt.close()
 
 
+def plot_PCAL_energy_by_sector(tracks, plot_title, plots_directory):
+    # One figure per sector: PCAL vs. ECIN + ECOUT energy for all negative
+    # tracks (left) and for those passing the HTCC and SF cuts (right)
+    sector = ak.to_numpy(ak.flatten(tracks["sector"]))
+    E_PCAL = ak.to_numpy(ak.flatten(tracks["E_PCAL"]))
+    E_EC = ak.to_numpy(ak.flatten(tracks["E_ECIN"] + tracks["E_ECOUT"]))
+    Nphe_HTCC = ak.to_numpy(ak.flatten(tracks["Nphe_HTCC"]))
+    E_dep = E_PCAL + E_EC
+    SF = E_dep / ak.to_numpy(ak.flatten(tracks["p"]))
+
+    for i in range(1, 7):
+        # Tracks with no calorimeter energy at all would pile up in the (0, 0) bin
+        sector_mask = (sector == i) & (E_dep > 0)
+        params = SF_CUT_PARAMETERS[i]
+        # Tracks with E_dep = 0 give inf/nan for mu and sigma and fail the SF cut
+        with np.errstate(divide="ignore", invalid="ignore"):
+            mu = sf_mean(E_dep, params)
+            sigma = sf_sigma(E_dep, params)
+        pass_cuts = (Nphe_HTCC > 2) & (np.abs(SF - mu) < 5 * sigma)
+
+        fig, axs = plt.subplots(1, 2, figsize=(24, 10))
+        for ax, mask, title in [
+            (axs[0], sector_mask, "All negative tracks"),
+            (axs[1], (sector_mask) & (pass_cuts), "Pass $N_{phe}$ + SF cuts"),
+        ]:
+            _, _, _, mesh = ax.hist2d(
+                E_PCAL[mask],
+                E_EC[mask],
+                bins=200,
+                range=[[0, 0.6], [0, 0.6]],
+                norm=colors.LogNorm(),
+            )
+            ax.axvline(0.06, color="red", label="$E_{PCAL}$ > 0.06 GeV cut")
+            ax.legend(frameon=True, facecolor="white", edgecolor="black", framealpha=1)
+            ax.set_xlabel("$E_{PCAL}$ (GeV)")
+            ax.set_ylabel("$E_{ECIN} + E_{ECOUT}$ (GeV)")
+            ax.set_title(f"Sector {i} - {title}")
+
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            fig.colorbar(mesh, cax=cax)
+
+        plt.suptitle(plot_title)
+        plt.tight_layout()
+        plt.savefig(os.path.join(plots_directory, f"PCAL_energy_cuts_sector{i}.png"))
+        plt.close()
+
+
 def plot_HTCC_photoelectrons(tracks, plot_title, plots_directory):
     sector = ak.flatten(tracks["sector"])
     Nphe_HTCC = ak.flatten(tracks["Nphe_HTCC"])
@@ -483,6 +531,7 @@ def main():
                 apply_cuts=True,
                 max_energy=max_energy,
             )
+        plot_PCAL_energy_by_sector(negative_tracks, plot_title, plots_directory)
         plot_HTCC_photoelectrons(negative_tracks, plot_title, plots_directory)
         plot_sampling_fraction(negative_tracks, plot_title, plots_directory)
         plot_sampling_fraction(
