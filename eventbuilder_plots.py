@@ -4,8 +4,9 @@
 # 2. HTCC photoelectron cut
 # 3. SF vs Edep fit plot
 # The starting point of this file should be charged tracks for all events, and separately for only events with a trigger electron
-# (since events without one are dropped later anyway), for tracks with energy in both the PCAL and ECIN + ECOUT,
-# and for only EB electrons (pid == 11). Each set of plots is saved in its own subdirectory.
+# (since events without one are dropped later anyway), for tracks with energy in both the PCAL and ECIN + ECOUT
+# (in all events and in events with a trigger electron), and for only EB electrons (pid == 11).
+# Each set of plots is saved in its own subdirectory.
 # The input files should be those coming from the tuple maker
 # In these plots, use all negative tracks.
 # Similar to the other scripts, this should be done either for an array of input files or a single file.
@@ -198,6 +199,13 @@ def get_negative_tracks(events, require_trigger_electron):
         tracks = tracks[tracks["has_trigger_electron"]]
     tracks = ak.without_field(tracks, "has_trigger_electron")
     return tracks[tracks["track_charge"] < 0]
+
+
+def select_nonzero_pcal_ecal_energy(tracks):
+    # Keeps tracks with energy in both the PCAL and ECIN + ECOUT
+    return tracks[
+        (tracks["E_PCAL"] > 0) & (tracks["E_ECIN"] + tracks["E_ECOUT"] > 0)
+    ]
 
 
 def plot_PCAL_energy(
@@ -501,12 +509,12 @@ def main():
             "trigger_electron_events",
             lambda: get_negative_tracks(events, require_trigger_electron=True),
         ),
+        ("nonzero_pcal_ecal_energy", lambda: select_nonzero_pcal_ecal_energy(all_tracks)),
         (
-            "nonzero_pcal_ecal_energy",
-            lambda: all_tracks[
-                (all_tracks["E_PCAL"] > 0)
-                & (all_tracks["E_ECIN"] + all_tracks["E_ECOUT"] > 0)
-            ],
+            "trigger_electron_nonzero_pcal_ecal_energy",
+            lambda: select_nonzero_pcal_ecal_energy(
+                get_negative_tracks(events, require_trigger_electron=True)
+            ),
         ),
         ("electrons", lambda: all_tracks[all_tracks["pid"] == 11]),
     ]
