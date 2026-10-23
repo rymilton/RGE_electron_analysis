@@ -26,6 +26,7 @@ def _open_one_file(
     gen_branches_to_open,
     gen_tree_name,
     get_meta_info,
+    meta_tree_name="meta_info",
     entry_stop=None,
 ):
     # Opens one file's reconstructed/gen/meta_info trees.
@@ -41,7 +42,7 @@ def _open_one_file(
                 filter_name=gen_branches_to_open, entry_stop=entry_stop, library="ak"
             )
     if get_meta_info:
-        with uproot.open(data_path + f":meta_info") as file:
+        with uproot.open(data_path + f":{meta_tree_name}") as file:
             result["meta_info"] = file.arrays(
                 filter_name=[
                     "total_luminosity",
@@ -66,6 +67,7 @@ def open_data(
     output_format="awkward",  # Either dictionary or awkward
     log_file=None,
     get_meta_info=False,
+    meta_tree_name="meta_info",
     num_processes=1,
 ):
     # Appending the data for each file in lists and then converting to an Awkward array at the end
@@ -107,6 +109,7 @@ def open_data(
                     gen_branches_to_open,
                     gen_tree_name,
                     get_meta_info,
+                    meta_tree_name,
                 ): data_path
                 for data_path in data_paths
             }
@@ -141,6 +144,7 @@ def open_data(
                 gen_branches_to_open,
                 gen_tree_name,
                 get_meta_info,
+                meta_tree_name,
                 entry_stop=remaining_events,
             )
 

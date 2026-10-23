@@ -189,9 +189,9 @@ def get_plot_title(flags, parameters):
         return None
     plot_names = parameters.get("PLOT_TITLES", {})
     if flags.data_name in plot_names:
-        return f"RGE LD2 + {flags.solid_target} : {plot_names[flags.data_name]}"
+        return f"RG-E LD2 + {flags.solid_target} : {plot_names[flags.data_name]}"
     else:
-        return f"RGE LD2 + {flags.solid_target} : {flags.run_number} Pass 1"
+        return f"RG-E LD2 + {flags.solid_target} : {flags.run_number} Pass 1"
 
 
 def get_input_files(flags):
