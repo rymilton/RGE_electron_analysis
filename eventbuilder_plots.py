@@ -4,7 +4,8 @@
 # 2. HTCC photoelectron cut
 # 3. SF vs Edep fit plot
 # The starting point of this file should be charged tracks for all events, and separately for only events with a trigger electron
-# (since events without one are dropped later anyway). Each set of plots is saved in its own subdirectory.
+# (since events without one are dropped later anyway), for tracks with energy in both the PCAL and ECIN + ECOUT,
+# and for only EB electrons (pid == 11). Each set of plots is saved in its own subdirectory.
 # The input files should be those coming from the tuple maker
 # In these plots, use all negative tracks.
 # Similar to the other scripts, this should be done either for an array of input files or a single file.
@@ -97,6 +98,7 @@ BRANCHES_TO_OPEN = [
     "E_ECIN",
     "E_ECOUT",
     "Nphe_HTCC",
+    "pid",
 ]
 
 
@@ -363,11 +365,26 @@ def main():
     )
     plot_title = get_plot_title(flags, parameters, events)
 
-    for subdirectory, require_trigger_electron in [
-        ("all_events", False),
-        ("trigger_electron_events", True),
-    ]:
-        negative_tracks = get_negative_tracks(events, require_trigger_electron)
+    all_tracks = get_negative_tracks(events, require_trigger_electron=False)
+    # Each set is built only when its plots are made, to avoid holding all of them in memory at once
+    track_sets = [
+        ("all_events", lambda: all_tracks),
+        (
+            "trigger_electron_events",
+            lambda: get_negative_tracks(events, require_trigger_electron=True),
+        ),
+        (
+            "nonzero_pcal_ecal_energy",
+            lambda: all_tracks[
+                (all_tracks["E_PCAL"] > 0)
+                & (all_tracks["E_ECIN"] + all_tracks["E_ECOUT"] > 0)
+            ],
+        ),
+        ("electrons", lambda: all_tracks[all_tracks["pid"] == 11]),
+    ]
+
+    for subdirectory, get_tracks in track_sets:
+        negative_tracks = get_tracks()
         print(
             f"{subdirectory}: selected {ak.sum(ak.num(negative_tracks['track_charge']))} "
             f"negative tracks from {len(negative_tracks)} events"
