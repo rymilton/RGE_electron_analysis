@@ -200,9 +200,11 @@ def get_negative_tracks(events, require_trigger_electron):
     return tracks[tracks["track_charge"] < 0]
 
 
-def plot_PCAL_energy(tracks, plot_title, plots_directory, apply_cuts=False):
+def plot_PCAL_energy(
+    tracks, plot_title, plots_directory, apply_cuts=False, max_energy=0.6
+):
     # apply_cuts=True keeps only tracks passing the HTCC (Nphe > 2) and SF
-    # (within mu +- 5 sigma) cuts
+    # (within mu +- 5 sigma) cuts. max_energy sets the upper edge of both axes (GeV).
     sector = ak.to_numpy(ak.flatten(tracks["sector"]))
     E_PCAL = ak.to_numpy(ak.flatten(tracks["E_PCAL"]))
     E_EC = ak.to_numpy(ak.flatten(tracks["E_ECIN"] + tracks["E_ECOUT"]))
@@ -229,7 +231,7 @@ def plot_PCAL_energy(tracks, plot_title, plots_directory, apply_cuts=False):
             E_PCAL[sector_mask],
             E_EC[sector_mask],
             bins=200,
-            range=[[0, 0.6], [0, 0.6]],
+            range=[[0, max_energy], [0, max_energy]],
             norm=colors.LogNorm(),
         )
         ax.axvline(0.06, color="red", label="$E_{PCAL}$ > 0.06 GeV cut")
@@ -244,8 +246,10 @@ def plot_PCAL_energy(tracks, plot_title, plots_directory, apply_cuts=False):
 
     plt.suptitle(plot_title)
     plt.tight_layout()
-    file_name = "PCAL_energy_HTCC_SF_cuts.png" if apply_cuts else "PCAL_energy.png"
-    plt.savefig(os.path.join(plots_directory, file_name))
+    file_name = "PCAL_energy_HTCC_SF_cuts" if apply_cuts else "PCAL_energy"
+    if max_energy != 0.6:
+        file_name += f"_max_{max_energy}_GeV"
+    plt.savefig(os.path.join(plots_directory, file_name + ".png"))
     plt.close()
 
 
@@ -468,8 +472,17 @@ def main():
 
         plots_directory = os.path.join(flags.plots_directory, subdirectory)
         os.makedirs(plots_directory, exist_ok=True)
-        plot_PCAL_energy(negative_tracks, plot_title, plots_directory)
-        plot_PCAL_energy(negative_tracks, plot_title, plots_directory, apply_cuts=True)
+        for max_energy in [0.6, 1.5]:
+            plot_PCAL_energy(
+                negative_tracks, plot_title, plots_directory, max_energy=max_energy
+            )
+            plot_PCAL_energy(
+                negative_tracks,
+                plot_title,
+                plots_directory,
+                apply_cuts=True,
+                max_energy=max_energy,
+            )
         plot_HTCC_photoelectrons(negative_tracks, plot_title, plots_directory)
         plot_sampling_fraction(negative_tracks, plot_title, plots_directory)
         plot_sampling_fraction(
