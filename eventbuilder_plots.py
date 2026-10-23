@@ -220,7 +220,11 @@ def plot_PCAL_energy(tracks, plot_title, plots_directory, apply_cuts=False):
             with np.errstate(divide="ignore", invalid="ignore"):
                 mu = sf_mean(E_dep, params)
                 sigma = sf_sigma(E_dep, params)
-            sector_mask &= (Nphe_HTCC > 2) & (np.abs(SF - mu) < 5 * sigma)
+            sector_mask = (
+                (sector_mask)
+                & (Nphe_HTCC > 2)
+                & (np.abs(SF - mu) < 5 * sigma)
+            )
         _, _, _, mesh = ax.hist2d(
             E_PCAL[sector_mask],
             E_EC[sector_mask],
@@ -254,7 +258,7 @@ def plot_HTCC_photoelectrons(tracks, plot_title, plots_directory):
     fig, ax = plt.subplots(figsize=(12, 10))
     for i in range(1, 7):
         ax.hist(
-            Nphe_HTCC[(sector == i) & has_HTCC],
+            Nphe_HTCC[(sector == i) & (has_HTCC)],
             bins=np.arange(0, 76),
             histtype="step",
             linewidth=2,
@@ -297,7 +301,7 @@ def plot_sampling_fraction(tracks, plot_title, plots_directory, apply_cuts=False
     fig, axs = plt.subplots(2, 3, figsize=(30, 18))
     for i, ax in enumerate(axs.flatten()):
         # Tracks with no calorimeter energy at all would pile up in the (0, 0) bin
-        sector_mask = (sector == i + 1) & pass_cuts & (E_dep > 0)
+        sector_mask = (sector == i + 1) & (pass_cuts) & (E_dep > 0)
         _, _, _, mesh = ax.hist2d(
             E_dep[sector_mask],
             SF[sector_mask],
@@ -349,6 +353,74 @@ def plot_sampling_fraction(tracks, plot_title, plots_directory, apply_cuts=False
     plt.close()
 
 
+def write_electron_summary(tracks, plots_directory):
+    # Counts EB electrons (pid == 11) among negative FD tracks and checks that the
+    # PCAL, HTCC, and SF cuts reproduce the EB electron ID. Electrons failing any
+    # cut mean the cut values (e.g. SF_CUT_PARAMETERS) don't match this run.
+    tracks = tracks[tracks["sector"] > 0]
+    sector = ak.flatten(tracks["sector"])
+    E_PCAL = ak.flatten(tracks["E_PCAL"])
+    E_dep = E_PCAL + ak.flatten(tracks["E_ECIN"] + tracks["E_ECOUT"])
+    SF = E_dep / ak.flatten(tracks["p"])
+    Nphe_HTCC = ak.flatten(tracks["Nphe_HTCC"])
+    is_electron = ak.flatten(tracks["pid"]) == 11
+
+    pass_PCAL = E_PCAL > 0.06
+    pass_HTCC = Nphe_HTCC > 2
+    pass_SF = False
+    for i in range(1, 7):
+        # Tracks with E_dep = 0 give inf/nan for mu and sigma and fail the SF cut
+        with np.errstate(divide="ignore", invalid="ignore"):
+            mu = sf_mean(E_dep, SF_CUT_PARAMETERS[i])
+            sigma = sf_sigma(E_dep, SF_CUT_PARAMETERS[i])
+        pass_SF = (pass_SF) | ((sector == i) & (np.abs(SF - mu) < 5 * sigma))
+    pass_all = (pass_PCAL) & (pass_HTCC) & (pass_SF)
+    fail_any = (is_electron) & (~pass_all)
+
+    lines = [
+        f"Negative FD tracks: {len(is_electron)}",
+        f"EB electrons (pid == 11): {np.sum(is_electron)} ({100 * np.mean(is_electron):.1f}%)",
+        "Cuts (E_PCAL > 0.06 GeV, Nphe_HTCC > 2, SF within mu +- 5 sigma) vs. pid == 11:",
+        f"  Pass all cuts, pid == 11: {np.sum((pass_all) & (is_electron))}",
+        f"  Pass all cuts, pid != 11: {np.sum((pass_all) & (~is_electron))}",
+        f"  pid == 11, fail any cut: {np.sum(fail_any)} "
+        f"(PCAL: {np.sum((fail_any) & (~pass_PCAL))}, HTCC: {np.sum((fail_any) & (~pass_HTCC))}, "
+        f"SF: {np.sum((fail_any) & (~pass_SF))})",
+    ]
+    summary = "\n".join(lines)
+    print(summary)
+    with open(os.path.join(plots_directory, "summary.txt"), "w") as f:
+        f.write(summary + "\n")
+
+
+def plot_track_multiplicity(events, plot_title, plots_directory):
+    # Number of total, positive, and negative tracks (REC::Track, FD and CD) per event
+    track_charge = events["reconstructed"]["track_charge"]
+
+    fig, ax = plt.subplots(figsize=(12, 10))
+    for name, num_tracks in [
+        ("Total", ak.num(track_charge)),
+        ("Positive", ak.sum(track_charge > 0, axis=1)),
+        ("Negative", ak.sum(track_charge < 0, axis=1)),
+    ]:
+        ax.hist(
+            num_tracks,
+            bins=np.arange(-0.5, np.max(num_tracks) + 1.5),
+            histtype="step",
+            linewidth=2,
+            label=f"{name}: mean = {np.mean(num_tracks):.2f}, std. dev. = {np.std(num_tracks):.2f}",
+        )
+    ax.set_yscale("log")
+    ax.legend()
+    ax.set_xlabel("Number of tracks per event")
+    ax.set_ylabel("Events")
+    ax.set_title(plot_title)
+
+    plt.tight_layout()
+    plt.savefig(os.path.join(plots_directory, "track_multiplicity.png"))
+    plt.close()
+
+
 def main():
     flags = parse_arguments()
     parameters = LoadYaml(flags.config, flags.config_directory)
@@ -366,6 +438,10 @@ def main():
     plot_title = get_plot_title(flags, parameters, events)
 
     all_tracks = get_negative_tracks(events, require_trigger_electron=False)
+    os.makedirs(flags.plots_directory, exist_ok=True)
+    write_electron_summary(all_tracks, flags.plots_directory)
+    plot_track_multiplicity(events, plot_title, flags.plots_directory)
+
     # Each set is built only when its plots are made, to avoid holding all of them in memory at once
     track_sets = [
         ("all_events", lambda: all_tracks),
