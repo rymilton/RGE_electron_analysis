@@ -25,6 +25,9 @@ hep.style.use("CMS")
 
 # Event builder sampling fraction cut parameters for each sector, used in
 # sf_mean() and sf_sigma()
+# These parameters come from https://clasweb.jlab.org/cgi-bin/ccdb/versions?table=/calibration/eb/electron_sf
+# The run min/max on this page are 12706-infinity, which was determined by Monte Carlo
+# Since the sampling fraction is intrinsic to the detector, the values should not change and we can reuse these in the EB
 SF_CUT_PARAMETERS = {
     1: {
         "sf1": 0.23372,
@@ -203,9 +206,7 @@ def get_negative_tracks(events, require_trigger_electron):
 
 def select_nonzero_pcal_ecal_energy(tracks):
     # Keeps tracks with energy in both the PCAL and ECIN + ECOUT
-    return tracks[
-        (tracks["E_PCAL"] > 0) & (tracks["E_ECIN"] + tracks["E_ECOUT"] > 0)
-    ]
+    return tracks[(tracks["E_PCAL"] > 0) & (tracks["E_ECIN"] + tracks["E_ECOUT"] > 0)]
 
 
 def plot_PCAL_energy(
@@ -231,9 +232,7 @@ def plot_PCAL_energy(
                 mu = sf_mean(E_dep, params)
                 sigma = sf_sigma(E_dep, params)
             sector_mask = (
-                (sector_mask)
-                & (Nphe_HTCC > 2)
-                & (np.abs(SF - mu) < 5 * sigma)
+                (sector_mask) & (Nphe_HTCC > 2) & (np.abs(SF - mu) < 5 * sigma)
             )
         _, _, _, mesh = ax.hist2d(
             E_PCAL[sector_mask],
@@ -509,7 +508,10 @@ def main():
             "trigger_electron_events",
             lambda: get_negative_tracks(events, require_trigger_electron=True),
         ),
-        ("nonzero_pcal_ecal_energy", lambda: select_nonzero_pcal_ecal_energy(all_tracks)),
+        (
+            "nonzero_pcal_ecal_energy",
+            lambda: select_nonzero_pcal_ecal_energy(all_tracks),
+        ),
         (
             "trigger_electron_nonzero_pcal_ecal_energy",
             lambda: select_nonzero_pcal_ecal_energy(
