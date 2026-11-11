@@ -172,7 +172,7 @@ ELECTRON_FIDUCIAL_CUTS:
   - DC_region2_edge > 2.3
   - DC_region3_edge > 5.7
 
-# By default, all plots will have "RGE LD2 + solid target"
+# By default, all plots will have "RG-E LD2 + solid target"
 PLOT_TITLES:
   data_C: "20030 Pass 1"
   data_Cu: "20226 Pass 1"

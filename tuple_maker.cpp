@@ -138,7 +138,7 @@ void process_single_file(
     std::vector<float> E_PCAL, E_ECIN, E_ECOUT;
     std::vector<float> PCAL_U, PCAL_V, PCAL_W;
     std::vector<float> PCAL_x, PCAL_y, PCAL_z, PCAL_edge;
-    std::vector<int> Nphe_HTCC, Nphe_LTCC;
+    std::vector<float> Nphe_HTCC, Nphe_LTCC;
     std::vector<float> DC_region1_x, DC_region1_y, DC_region1_z, DC_region1_edge;
     std::vector<float> DC_region2_x, DC_region2_y, DC_region2_z, DC_region2_edge;
     std::vector<float> DC_region3_x, DC_region3_y, DC_region3_z, DC_region3_edge;
@@ -463,9 +463,12 @@ void process_single_file(
             PCAL_V.push_back(PCAL_V_sum);
             PCAL_W.push_back(PCAL_W_sum);
 
-            // Reset Cherenkov sums
-            int Nphe_HTCC_sum = 0;
-            int Nphe_LTCC_sum = 0;
+            // Reset Cherenkov sums. Tracks with no HTCC/LTCC entry are set
+            // to -9999 below, so they're distinguishable from a real hit with ~0 phe.
+            float Nphe_HTCC_sum = 0;
+            float Nphe_LTCC_sum = 0;
+            bool has_HTCC = false;
+            bool has_LTCC = false;
 
             // Cherenkov info
             for (std::size_t j = 0; j < cherenkov_pindex_branch.GetSize(); j++)
@@ -474,20 +477,22 @@ void process_single_file(
                     continue;
 
                 int detector_number = (int)cherenkov_detectorindex_branch[j];
-                int num_photoelectrons = (int)cherenkov_photoelectrons_branch[j];
+                float num_photoelectrons = cherenkov_photoelectrons_branch[j];
 
                 if (detector_number == 15)
                 {
                     Nphe_HTCC_sum += num_photoelectrons;
+                    has_HTCC = true;
                 }
                 else if (detector_number == 16)
                 {
                     Nphe_LTCC_sum += num_photoelectrons;
+                    has_LTCC = true;
                 }
             }
 
-            Nphe_HTCC.push_back(Nphe_HTCC_sum);
-            Nphe_LTCC.push_back(Nphe_LTCC_sum);
+            Nphe_HTCC.push_back(has_HTCC ? Nphe_HTCC_sum : -9999);
+            Nphe_LTCC.push_back(has_LTCC ? Nphe_LTCC_sum : -9999);
 
             // Reset DC info
 
